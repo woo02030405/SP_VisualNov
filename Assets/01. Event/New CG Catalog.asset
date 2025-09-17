@@ -1,0 +1,20 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a1b75b5bcb036a647b718a5c7fff2f72, type: 3}
+  m_Name: New CG Catalog
+  m_EditorClassIdentifier: 
+  items:
+  - id: 
+    title: Stat
+    thumbnail: {fileID: 21300000, guid: 77d3fbc70e0d389408893c6898c7e197, type: 3}
+    fullImage: {fileID: 21300000, guid: 77d3fbc70e0d389408893c6898c7e197, type: 3}
+    unlocked: 1
