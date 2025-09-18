@@ -1421,7 +1421,7 @@ MonoBehaviour:
       m_Calls:
       - m_Target: {fileID: 345034952}
         m_TargetAssemblyTypeName: SceneNavigator, Assembly-CSharp
-        m_MethodName: BackTo
+        m_MethodName: Load
         m_Mode: 5
         m_Arguments:
           m_ObjectArgument: {fileID: 0}
