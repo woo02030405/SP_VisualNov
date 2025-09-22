@@ -1,123 +1,101 @@
-using UnityEngine;
-using UnityEngine.UI;
-using TMPro;
+Ôªøusing UnityEngine;
 using System.Collections.Generic;
-using VN.SaveSystem; // SaveManager, SaveData ¬¸¡∂
+using System.IO;
+using VN.Dialogue;
 
 public class SaveLoadUIManager : MonoBehaviour
 {
-    [Header("Header")]
-    public TMP_Text titleText;   // SAVE / LOAD
+    [SerializeField] private GameObject slotPrefab;
+    [SerializeField] private Transform slotParent;
 
-    [Header("NavigationBar")]
-    public Button prevButton;
-    public TMP_Text pageLabel;
-    public Button nextButton;
+    [SerializeField] private DialogueManager dialogueManager; 
+    private List<SaveSlotUI> slots = new List<SaveSlotUI>();
+    private SaveData currentSaveData;
+    private bool isSaving = true;
 
-    [Header("Footer")]
-    public Button backButton;
-    public TMP_Text infoText;
-
-    [Header("Slots")]
-    public Transform slotGrid;     // GridLayoutGroup
-    public GameObject slotPrefab;  // SlotPrefab
-    private List<SaveSlotUI> slotUIs = new List<SaveSlotUI>();
-
-    private int currentPage = 0;
-    private const int slotsPerPage = 10;
-
-    // Save/Load ∏µÂ (true = Save, false = Load)
-    public bool isSaveMode = false;
+    private string SavePath => Path.Combine(Application.persistentDataPath, "saves");
 
     void Start()
     {
-        // ∆‰¿Ã¡ˆ πˆ∆∞ ¿Ã∫•∆Æ
-        prevButton.onClick.AddListener(() =>
-        {
-            currentPage = Mathf.Max(0, currentPage - 1);
-            RefreshPage();
-        });
-
-        nextButton.onClick.AddListener(() =>
-        {
-            currentPage = Mathf.Min(TotalPages - 1, currentPage + 1);
-            RefreshPage();
-        });
-
-        backButton.onClick.AddListener(() =>
-        {
-            var nav = FindObjectOfType<SceneNavigator>();
-            if (nav != null) nav.Back();
-        });
-
-        BuildSlots();
-        RefreshPage();
+        RefreshSlots();
     }
 
-    private int TotalPages
+    public void RefreshSlots()
     {
-        get
-        {
-            if (SaveManager.Instance == null) return 1;
-            int totalSlots = SaveManager.Instance.GetTotalSlotCount();
-            return Mathf.Max(1, Mathf.CeilToInt(totalSlots / (float)slotsPerPage));
-        }
-    }
-
-    private void BuildSlots()
-    {
-        foreach (Transform child in slotGrid)
-        {
+        foreach (Transform child in slotParent)
             Destroy(child.gameObject);
-        }
-        slotUIs.Clear();
 
-        for (int i = 0; i < slotsPerPage; i++)
+        slots.Clear();
+
+        if (!Directory.Exists(SavePath))
+            Directory.CreateDirectory(SavePath);
+
+        string[] files = Directory.GetFiles(SavePath, "*.json");
+        int index = 1;
+
+        // Í∏∞Ï°¥ ÏÑ∏Ïù¥Î∏å Ïä¨Î°Ø
+        foreach (string file in files)
         {
-            var slotObj = Instantiate(slotPrefab, slotGrid);
-            var ui = slotObj.GetComponent<SaveSlotUI>();
-            slotUIs.Add(ui);
+            string slotName = Path.GetFileNameWithoutExtension(file);
+            SaveData data = SaveManager.LoadGame(slotName);
 
-            ui.Init(i, isSaveMode, OnClickSlot);
+            GameObject slotObj = Instantiate(slotPrefab, slotParent);
+            SaveSlotUI slotUI = slotObj.GetComponent<SaveSlotUI>();
+            slotUI.Init(slotName, data, OnSlotClicked);
+            slots.Add(slotUI);
+
+            index++;
         }
+
+        // ÏÉà Ïä¨Î°Ø Ï∂îÍ∞Ä
+        GameObject newSlotObj = Instantiate(slotPrefab, slotParent);
+        SaveSlotUI newSlotUI = newSlotObj.GetComponent<SaveSlotUI>();
+        newSlotUI.Init($"slot{index}", null, OnSlotClicked);
+        slots.Add(newSlotUI);
     }
 
-    private void RefreshPage()
+    private void OnSlotClicked(string slotName)
     {
-        // Header
-        titleText.text = isSaveMode ? "SAVE" : "LOAD";
-
-        // Footer
-        infoText.text = isSaveMode ? "∞‘¿” µ•¿Ã≈Õ∏¶ ¿˙¿Â«’¥œ¥Ÿ." : "∞‘¿” µ•¿Ã≈Õ∏¶ ∫“∑Øø…¥œ¥Ÿ.";
-
-        // NavigationBar
-        pageLabel.text = $"{currentPage + 1} / {TotalPages}";
-
-        // ΩΩ∑‘ √§øÏ±‚
-        var slots = SaveManager.Instance.GetSlotsForPage(currentPage, slotsPerPage);
-
-        for (int i = 0; i < slotsPerPage; i++)
+        if (isSaving)
         {
-            var data = (i < slots.Count) ? slots[i] : null;
-            slotUIs[i].SetData(data, isNewest: (i == 0));
-        }
+            currentSaveData.title = $"ÏÑ∏Ïù¥Î∏å {slotName}";
+            currentSaveData.dateTime = System.DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
 
-        prevButton.interactable = currentPage > 0;
-        nextButton.interactable = currentPage < (TotalPages - 1);
-    }
+            // Ïç∏ÎÑ§Ïùº Ï∫°Ï≤ò
+            string thumbnailPath = Path.Combine(SavePath, slotName + "_thumb.png");
+            ScreenCapture.CaptureScreenshot(thumbnailPath);
+            currentSaveData.thumbnailPath = thumbnailPath;
 
-    private void OnClickSlot(int slotIndexInPage)
-    {
-        int realIndex = currentPage * slotsPerPage + slotIndexInPage;
-
-        if (isSaveMode)
-        {
-            SaveManager.Instance.Save(realIndex);
-            RefreshPage();
+            SaveManager.SaveGame(currentSaveData, slotName);
+            Debug.Log($"[SaveLoadUIManager] {slotName} Ï†ÄÏû• ÏôÑÎ£å");
         }
         else
         {
-            SaveManager.Instance.Load(realIndex);
+            SaveData loaded = SaveManager.LoadGame(slotName);
+            if (loaded != null)
+            {
+                currentSaveData = loaded;
+                Debug.Log($"[SaveLoadUIManager] {slotName} Î∂àÎü¨Ïò§Í∏∞ ÏôÑÎ£å");
+
+                //  DialogueManagerÎ°ú Ïù¥Ïñ¥Í∞ÄÍ∏∞
+                if (dialogueManager != null && !string.IsNullOrEmpty(loaded.nodeId))
+                {
+                    dialogueManager.GoToNode(loaded.nodeId); 
+                }
+            }
         }
+
+        RefreshSlots();
+    }
+
+    public void SetCurrentSaveData(SaveData data)
+    {
+        currentSaveData = data;
+    }
+
+    public void SetMode(bool saveMode)
+    {
+        isSaving = saveMode;
+        RefreshSlots();
     }
 }

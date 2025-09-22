@@ -1,121 +1,81 @@
+ï»¿using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
-using System.Collections.Generic;
 using VN.Data;
 
 public class EventGalleryUI : MonoBehaviour
 {
-    [Header("Data")]
-    public EventCatalog catalog;
+    [SerializeField] private EventCatalog catalog;
+    [SerializeField] private List<Button> eventButtons;
+    [SerializeField] private List<Image> eventThumbs;
+    [SerializeField] private List<GameObject> lockOverlays;
+    [SerializeField] private TMP_Text titleText;
+    [SerializeField] private TMP_Text descText;
+    [SerializeField] private Button replayButton;
+    [SerializeField] private Image previewImage;
 
-    [Header("Slots (6 buttons)")]
-    public List<Button> eventButtons;        // EventItem 6°³ ¹öÆ°
-    public List<Image> eventThumbs;         // °¢ ¹öÆ° ¾ÈÀÇ Thumb
-    public List<TMP_Text> eventTitles;       // °¢ ¹öÆ° ¾ÈÀÇ Title
-    public List<GameObject> lockOverlays;    // °¢ ¹öÆ° ¾ÈÀÇ LockOverlay
+    private int currentIndex = -1;
 
-    [Header("Preview")]
-    public Image previewImage;
-    public TMP_Text previewTitle;
-    public TMP_Text previewDesc;
-    public Button replayButton;
-
-    [Header("Navigation")]
-    public Button prevButton;
-    public Button nextButton;
-    public TMP_Text pageLabel;
-
-    [Header("Progress")]
-    public TMP_Text progressText;
-
-    private int currentPage = 0;
-    private const int perPage = 6;
-    private int TotalPages => Mathf.Max(1, Mathf.CeilToInt(catalog.events.Count / (float)perPage));
-
-    void Start()
+    private void Start()
     {
-        // ³×ºñ°ÔÀÌ¼Ç ¹öÆ° ÀÌº¥Æ® ¿¬°á
-        prevButton.onClick.AddListener(() => { currentPage = Mathf.Max(0, currentPage - 1); RefreshAll(); });
-        nextButton.onClick.AddListener(() => { currentPage = Mathf.Min(TotalPages - 1, currentPage + 1); RefreshAll(); });
-
         RefreshAll();
-        SelectFirstUnlockedForPreview();
+        replayButton.onClick.AddListener(OnReplay);
     }
 
-    void RefreshAll()
+    private void RefreshAll()
     {
-        // ÆäÀÌÁö ¶óº§
-        pageLabel.text = $"{currentPage + 1} / {TotalPages}";
+        var save = SaveManager.CurrentSave;
 
-        // ÁøÇàµµ (ÇØÁ¦µÈ °³¼ö / ÀüÃ¼)
-        int unlocked = 0;
-        foreach (var e in catalog.events) if (e.unlocked) unlocked++;
-        progressText.text = $"Unlocked {unlocked} / {catalog.events.Count}";
-
-        // ½½·Ô 6°³ µ¥ÀÌÅÍ Ã¤¿ì±â
-        int start = currentPage * perPage;
         for (int i = 0; i < eventButtons.Count; i++)
         {
-            int dataIndex = start + i;
-            bool active = (dataIndex < catalog.events.Count);
+            bool active = i < catalog.events.Count;
             eventButtons[i].gameObject.SetActive(active);
             if (!active) continue;
 
-            var data = catalog.events[dataIndex];
-            // ºñÁÖ¾ó
-            if (eventThumbs[i]) eventThumbs[i].sprite = data.thumbnail;
-            if (eventTitles[i]) eventTitles[i].text = data.unlocked ? data.title : "???";
-            if (lockOverlays[i]) lockOverlays[i].SetActive(!data.unlocked);
+            var data = catalog.events[i];
 
-            // ÀÎÅÍ·¢¼Ç
-            eventButtons[i].interactable = data.unlocked;
+            bool isUnlocked = save != null && save.IsEventUnlocked(data.id);
 
-            // Å¬¸¯ ÇÚµé·¯ °»½Å
+            eventThumbs[i].sprite = isUnlocked ? data.thumbnail : null;
+            lockOverlays[i].SetActive(!isUnlocked);
+
+            eventButtons[i].interactable = isUnlocked;
+            int index = i;
             eventButtons[i].onClick.RemoveAllListeners();
-            int capturedIndex = dataIndex;
-            eventButtons[i].onClick.AddListener(() => OnClickEvent(capturedIndex));
-        }
-
-        // Prev/Next »óÅÂ
-        prevButton.interactable = currentPage > 0;
-        nextButton.interactable = currentPage < (TotalPages - 1);
-    }
-
-    void OnClickEvent(int dataIndex)
-    {
-        var data = catalog.events[dataIndex];
-        UpdatePreview(data);
-    }
-
-    void UpdatePreview(EventRecord data)
-    {
-        if (previewImage) previewImage.sprite = data.thumbnail;
-        if (previewTitle) previewTitle.text = data.unlocked ? data.title : "???";
-        if (previewDesc) previewDesc.text = data.unlocked ? data.desc : "Àá±Ý ÇØÁ¦ ÈÄ È®ÀÎ °¡´É";
-
-        if (replayButton)
-        {
-            replayButton.interactable = data.unlocked && !string.IsNullOrEmpty(data.replayScene);
-            replayButton.onClick.RemoveAllListeners();
-            if (replayButton.interactable)
+            if (isUnlocked)
             {
-                replayButton.onClick.AddListener(() =>
-                {
-                    var nav = FindObjectOfType<SceneNavigator>();
-                    if (nav != null) nav.Load(data.replayScene);
-                });
+                eventButtons[i].onClick.AddListener(() => ShowPreview(index));
             }
         }
+
+        // ì´ˆê¸°í™”
+        titleText.text = "";
+        descText.text = "";
+        previewImage.sprite = null;
+        replayButton.gameObject.SetActive(false);
     }
 
-    void SelectFirstUnlockedForPreview()
+    private void ShowPreview(int index)
     {
-        foreach (var e in catalog.events)
+        currentIndex = index;
+        var data = catalog.events[index];
+
+        titleText.text = data.title;
+        descText.text = data.desc;
+        previewImage.sprite = data.thumbnail;
+
+        replayButton.gameObject.SetActive(true);
+    }
+
+    private void OnReplay()
+    {
+        if (currentIndex < 0 || currentIndex >= catalog.events.Count) return;
+        var data = catalog.events[currentIndex];
+
+        if (!string.IsNullOrEmpty(data.replayScene))
         {
-            if (e.unlocked) { UpdatePreview(e); return; }
+            SceneNavigator.Load(data.replayScene); 
         }
-        // ¸ðµÎ Àá±ÝÀÌ¸é Ã¹ Ç×¸ñÀ¸·Î
-        if (catalog.events.Count > 0) UpdatePreview(catalog.events[0]);
     }
 }

@@ -1,0 +1,5 @@
+﻿CharacterId,Expression,Pose,CharacterPosition,CharacterEffect,AnimationId,FilePath,Description
+YUNA,neutral,stand,center,fadein,blink,Characters/Yuna_neutral.png,유리 기본 표정
+YUNA,happy,stand,left,,zoom=1.2,Characters/Yuna_happy.png,유리 웃는 표정 (확대)
+MINJI,neutral,stand,right,,slideLeft,Characters/Minji_neutral.png,민지 기본 표정 (슬라이드 등장)
+MINJI,sad,stand,middle,fadeout,shake,Characters/Minji_sad.png,민지 울상 표정

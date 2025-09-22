@@ -2,58 +2,47 @@ using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 using System.IO;
-using VN.SaveSystem;
 
 public class SaveSlotUI : MonoBehaviour
 {
-    [Header("UI Components")]
-    public Image thumbnail;
-    public TMP_Text titleText;
-    public TMP_Text dateText;
-    public GameObject newIcon;
-    public Button slotButton;
+    [SerializeField] private Button button;
+    [SerializeField] private TMP_Text titleText;
+    [SerializeField] private TMP_Text dateText;
+    [SerializeField] private Image thumbnailImage;
 
-    private int slotIndex;
+    private string slotName;
+    private System.Action<string> onClick;
 
-    public void Init(int index, bool saveMode, System.Action<int> onClick)
+    public void Init(string slotName, SaveData data, System.Action<string> onClick)
     {
-        slotIndex = index;
-        slotButton.onClick.RemoveAllListeners();
-        slotButton.onClick.AddListener(() => onClick?.Invoke(slotIndex));
-    }
+        this.slotName = slotName;
+        this.onClick = onClick;
 
-    public void SetData(SaveData data, bool isNewest = false)
-    {
         if (data != null)
         {
-            // ½æ³×ÀÏ ·Îµå
+            titleText.text = string.IsNullOrEmpty(data.title) ? "¼¼ÀÌºê µ¥ÀÌÅÍ" : data.title;
+            dateText.text = data.dateTime ?? "";
+
             if (!string.IsNullOrEmpty(data.thumbnailPath) && File.Exists(data.thumbnailPath))
             {
-                byte[] png = File.ReadAllBytes(data.thumbnailPath);
+                byte[] bytes = File.ReadAllBytes(data.thumbnailPath);
                 Texture2D tex = new Texture2D(2, 2);
-                tex.LoadImage(png);
-                thumbnail.sprite = Sprite.Create(
-                    tex,
-                    new Rect(0, 0, tex.width, tex.height),
-                    new Vector2(0.5f, 0.5f));
+                tex.LoadImage(bytes);
+                thumbnailImage.sprite = Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0.5f, 0.5f));
             }
             else
             {
-                thumbnail.sprite = null;
+                thumbnailImage.sprite = null;
             }
-
-            // ÅØ½ºÆ®
-            titleText.text = string.IsNullOrEmpty(data.title) ? "No Title" : data.title;
-            dateText.text = string.IsNullOrEmpty(data.dateTime) ? "--/--/--" : data.dateTime;
-            newIcon.SetActive(isNewest);
         }
         else
         {
-            // ºó ½½·Ô Ç¥½Ã
-            thumbnail.sprite = null;
             titleText.text = "ºó ½½·Ô";
             dateText.text = "";
-            newIcon.SetActive(false);
+            thumbnailImage.sprite = null;
         }
+
+        button.onClick.RemoveAllListeners();
+        button.onClick.AddListener(() => onClick?.Invoke(slotName));
     }
 }

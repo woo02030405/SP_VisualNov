@@ -1,158 +1,191 @@
-﻿// DialogueParser.cs
-using System;
+﻿using System;
 using System.Collections.Generic;
-using System.IO;
-using UnityEngine;
-using VN.Dialogue;
 
-namespace VN.IO
+namespace VN.Dialogue
 {
     public static class DialogueParser
     {
-        public static Dictionary<string, DialogueNode> LoadFromStreamingAssets(string lang = "ko")
+        private static string GetStr(Dictionary<string, string> row, string key)
+            => (row != null && key != null && row.TryGetValue(key, out var v)) ? v : "";
+
+        private const string TOK_COND = "<=>";   // 조건
+        private const string TOK_EFF = "<|>";   // 효과
+        private const string TOK_ELSE = "<->";   // else 효과
+        private static readonly string[] CH_MARKERS = new[] { "<ch>" }; // 선택지 구분자
+
+        /// <summary>
+        /// Story + Dialogue + Resource CSV를 합쳐서 NodeMap 생성
+        /// </summary>
+        public static Dictionary<string, DialogueNode> Parse(
+            List<Dictionary<string, string>> storyCsv,
+            List<Dictionary<string, string>> dialogueCsv,
+            List<Dictionary<string, string>> resourceCsv)
         {
-            string storyPath = Path.Combine(Application.streamingAssetsPath, "Story.csv");
-            string dialoguePath = Path.Combine(Application.streamingAssetsPath, $"Dialogue_{lang}.csv");
-            return LoadCsv(storyPath, dialoguePath);
-        }
+            var nodeDict = new Dictionary<string, DialogueNode>();
 
-        public static Dictionary<string, DialogueNode> LoadCsv(string storyCsvPath, string dialogueCsvPath)
-        {
-            var map = new Dictionary<string, DialogueNode>();
-
-            // ---- Story.csv (NodeId, SpeakerId, Text) ----
-            var storyLines = File.ReadAllLines(storyCsvPath);
-            var storyHeader = CsvSplit(storyLines[0]);
-            int idxNodeId = Array.IndexOf(storyHeader, "NodeId");
-            int idxSpeakerId = Array.IndexOf(storyHeader, "SpeakerId");
-            int idxText = Array.IndexOf(storyHeader, "Text");
-
-            for (int i = 1; i < storyLines.Length; i++)
+            // --- Story CSV ---
+            if (storyCsv != null)
             {
-                if (string.IsNullOrWhiteSpace(storyLines[i])) continue;
-                var cols = CsvSplit(storyLines[i]);
-
-                var node = new DialogueNode
+                foreach (var row in storyCsv)
                 {
-                    NodeId = Safe(cols, idxNodeId),
-                    SpeakerId = Safe(cols, idxSpeakerId),
-                    Text = Safe(cols, idxText) // ✅ 실제 대사
-                };
+                    string id = GetStr(row, "NodeId");
+                    if (string.IsNullOrEmpty(id)) continue;
 
-                if (!string.IsNullOrEmpty(node.NodeId))
-                    map[node.NodeId] = node;
+                    // Text: "=>" 뒤는 기획자 주석 → 제거
+                    string rawText = GetStr(row, "Text");
+                    string cleanText = CutLabel(rawText);
+
+                    var node = new DialogueNode
+                    {
+                        Id = id,
+                        Chapter = GetStr(row, "Chapter"),
+                        Scene = GetStr(row, "Scene"),
+                        SpeakerId = GetStr(row, "Speaker"),
+                        Text = cleanText,
+                        NextNodeId = GetStr(row, "NextNodeId")
+                    };
+
+                    // Story에서 선택지 문구 파싱
+                    string choiceField = GetStr(row, "Choices");
+                    if (!string.IsNullOrEmpty(choiceField))
+                    {
+                        node.Choices = new List<ChoiceOption>();
+                        var labels = choiceField.Split(CH_MARKERS, StringSplitOptions.RemoveEmptyEntries);
+                        foreach (var lbl in labels)
+                        {
+                            string label = CutLabel(lbl.Trim());
+                            if (string.IsNullOrEmpty(label)) continue;
+
+                            node.Choices.Add(new ChoiceOption
+                            {
+                                Text = label,       // Story에서 표시할 선택지 문구
+                                NextNodeId = null,  // Dialogue에서 채움
+                                Condition = "-",
+                                Effect = "",
+                                ElseEffect = ""
+                            });
+                        }
+                    }
+
+                    nodeDict[id] = node;
+                }
             }
 
-            // ---- Dialogue_xx.csv (NodeId, Text=ID, Choices, NextNodeId, 연출 관련) ----
-            var dlgLines = File.ReadAllLines(dialogueCsvPath);
-            var dlgHeader = CsvSplit(dlgLines[0]);
-
-            int dNodeId = Array.IndexOf(dlgHeader, "NodeId");
-            int dChoices = Array.IndexOf(dlgHeader, "Choices");
-            int dBg = Array.IndexOf(dlgHeader, "Background");
-            int dBgm = Array.IndexOf(dlgHeader, "BGM");
-            int dCharType = Array.IndexOf(dlgHeader, "CharacterType");
-            int dExpr = Array.IndexOf(dlgHeader, "Expression");
-            int dPose = Array.IndexOf(dlgHeader, "Pose");
-            int dPos = Array.IndexOf(dlgHeader, "CharacterPosition");
-            int dEff = Array.IndexOf(dlgHeader, "CharacterEffect");
-            int dVoice = Array.IndexOf(dlgHeader, "VoiceId");
-            int dSfx = Array.IndexOf(dlgHeader, "SFX");
-            int dTrans = Array.IndexOf(dlgHeader, "Transition");
-            int dAnim = Array.IndexOf(dlgHeader, "AnimType");
-            int dTextEff = Array.IndexOf(dlgHeader, "TextEffect");
-            int dSkip = Array.IndexOf(dlgHeader, "SkipFlag");
-            int dNext = Array.IndexOf(dlgHeader, "NextNodeId");
-
-            for (int i = 1; i < dlgLines.Length; i++)
+            // --- Dialogue CSV ---
+            if (dialogueCsv != null)
             {
-                if (string.IsNullOrWhiteSpace(dlgLines[i])) continue;
-                var cols = CsvSplit(dlgLines[i]);
-                string nodeId = Safe(cols, dNodeId);
-                if (string.IsNullOrEmpty(nodeId)) continue;
-
-                if (!map.TryGetValue(nodeId, out var node))
+                foreach (var row in dialogueCsv)
                 {
-                    node = new DialogueNode { NodeId = nodeId };
-                    map[nodeId] = node;
-                }
+                    string nodeId = GetStr(row, "NodeId");
+                    if (string.IsNullOrEmpty(nodeId) || !nodeDict.ContainsKey(nodeId)) continue;
 
-                // 🎯 Dialogue.csv의 Text는 ID라서 무시
-                // node.Text = Story.csv 의 실제 대사 유지
+                    var node = nodeDict[nodeId];
+                    string choicesCol = GetStr(row, "Choices");
 
-                // 연출/효과 채움
-                node.Background = Safe(cols, dBg);
-                node.BGM = Safe(cols, dBgm);
-                node.CharacterType = Safe(cols, dCharType);
-                node.Expression = Safe(cols, dExpr);
-                node.Pose = Safe(cols, dPose);
-                node.CharacterPosition = Safe(cols, dPos);
-                node.CharacterEffect = Safe(cols, dEff);
-                node.VoiceId = Safe(cols, dVoice);
-                node.SFX = Safe(cols, dSfx);
-                node.Transition = Safe(cols, dTrans);
-                node.ChoiceAnimType = Safe(cols, dAnim);
-                node.TextEffect = Safe(cols, dTextEff);
-                node.NextNodeId = Safe(cols, dNext);
-
-                string skipRaw = Safe(cols, dSkip);
-                node.SkipFlag = string.Equals(skipRaw, "true", StringComparison.OrdinalIgnoreCase);
-
-                // 선택지
-                node.Choices.Clear();
-                string rawChoices = Safe(cols, dChoices);
-                if (!string.IsNullOrWhiteSpace(rawChoices))
-                {
-                    foreach (var p in rawChoices.Split(';'))
+                    // Story에서 선택지 개수만큼 이미 만들어져 있음 → Dialogue에서 로직 채워넣기
+                    if (!string.IsNullOrEmpty(choicesCol) && node.Choices != null && node.Choices.Count > 0)
                     {
-                        var kv = p.Split(':');
-                        if (kv.Length >= 2)
-                            node.Choices.Add(new ChoiceOption(kv[0].Trim(), kv[1].Trim()));
+                        var parsed = ParseChoices(choicesCol);
+                        for (int i = 0; i < node.Choices.Count && i < parsed.Count; i++)
+                        {
+                            node.Choices[i].NextNodeId = parsed[i].NextNodeId;
+                            node.Choices[i].Condition = parsed[i].Condition;
+                            node.Choices[i].Effect = parsed[i].Effect;
+                            node.Choices[i].ElseEffect = parsed[i].ElseEffect;
+                        }
                     }
                 }
             }
 
-            return map;
-        }
-
-        // CSV utils
-        static string[] CsvSplit(string line)
-        {
-            var list = new List<string>();
-            bool inQuotes = false;
-            var cur = new System.Text.StringBuilder();
-
-            for (int i = 0; i < line.Length; i++)
+            // --- Resource CSV (배경/사운드/연출 등) ---
+            if (resourceCsv != null)
             {
-                char c = line[i];
-                if (c == '\"')
+                foreach (var row in resourceCsv)
                 {
-                    if (inQuotes && i + 1 < line.Length && line[i + 1] == '\"')
-                    {
-                        cur.Append('\"');
-                        i++;
-                    }
-                    else
-                    {
-                        inQuotes = !inQuotes;
-                    }
-                }
-                else if (c == ',' && !inQuotes)
-                {
-                    list.Add(cur.ToString());
-                    cur.Length = 0;
-                }
-                else
-                {
-                    cur.Append(c);
+                    string nodeId = GetStr(row, "NodeId");
+                    if (string.IsNullOrEmpty(nodeId) || !nodeDict.ContainsKey(nodeId)) continue;
+
+                    var node = nodeDict[nodeId];
+                    node.Background = GetStr(row, "Background");
+                    node.BGM = GetStr(row, "BGM");
+                    node.SFX = GetStr(row, "SFX");
+                    node.VoiceId = GetStr(row, "VoiceId");
+                    node.CharacterId = GetStr(row, "CharacterId");
+                    node.Expression = GetStr(row, "Expression");
+                    node.Pose = GetStr(row, "Pose");
+                    node.CharacterPosition = GetStr(row, "CharacterPosition");
+                    node.CharacterEffect = GetStr(row, "CharacterEffect");
+                    node.AnimationId = GetStr(row, "AnimType");
+                    node.EventCG = GetStr(row, "EventCG");
+                    node.Transition = GetStr(row, "Transition");
                 }
             }
 
-            list.Add(cur.ToString());
-            return list.ToArray();
+            return nodeDict;
         }
 
-        static string Safe(string[] cols, int idx)
-            => (idx >= 0 && idx < cols.Length) ? cols[idx]?.Trim().Trim('\r', '\n') : string.Empty;
+        /// <summary>
+        /// Story 텍스트/선택지 문구에서 "=>" 뒤는 잘라냄 (기획자 주석 제거)
+        /// </summary>
+        private static string CutLabel(string raw)
+        {
+            if (string.IsNullOrEmpty(raw)) return "";
+            int idx = raw.IndexOf("=>");
+            return (idx >= 0) ? raw.Substring(0, idx).Trim() : raw.Trim();
+        }
+
+        /// <summary>
+        /// Dialogue CSV Choices 파싱 (조건/효과/NextNodeId)
+        /// </summary>
+        private static List<ChoiceOption> ParseChoices(string choicesText)
+        {
+            var list = new List<ChoiceOption>();
+            if (string.IsNullOrWhiteSpace(choicesText)) return list;
+
+            var rawChoices = choicesText.Split(CH_MARKERS, StringSplitOptions.RemoveEmptyEntries);
+            foreach (var rawStr in rawChoices)
+            {
+                var raw = rawStr?.Trim();
+                if (string.IsNullOrEmpty(raw)) continue;
+
+                string next = null, cond = "-", eff = "", effElse = "";
+                ParseAdvanced(raw, ref next, ref cond, ref eff, ref effElse);
+
+                list.Add(new ChoiceOption
+                {
+                    Text = null, // Story에서 채운다
+                    NextNodeId = next,
+                    Condition = cond,
+                    Effect = eff,
+                    ElseEffect = effElse
+                });
+            }
+
+            return list;
+        }
+
+        /// <summary>
+        /// "<=> 조건 <|> 효과 <-> else효과" 파싱
+        /// next 부분은 조건 앞에 항상 존재
+        /// </summary>
+        private static void ParseAdvanced(string raw, ref string next, ref string cond, ref string eff, ref string effElse)
+        {
+            string cur = raw;
+
+            // <-> Else 효과
+            string[] partsElse = cur.Split(new[] { TOK_ELSE }, StringSplitOptions.None);
+            cur = partsElse[0].Trim();
+            if (partsElse.Length > 1) effElse = partsElse[1].Trim();
+
+            // <|> 효과
+            string[] partsEff = cur.Split(new[] { TOK_EFF }, StringSplitOptions.None);
+            cur = partsEff[0].Trim();
+            if (partsEff.Length > 1) eff = partsEff[1].Trim();
+
+            // <=> 조건
+            string[] partsCond = cur.Split(new[] { TOK_COND }, StringSplitOptions.None);
+            next = partsCond[0].Trim();
+            if (partsCond.Length > 1) cond = partsCond[1].Trim();
+        }
     }
 }

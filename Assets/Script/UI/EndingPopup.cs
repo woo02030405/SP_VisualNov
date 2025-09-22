@@ -2,7 +2,6 @@
 using UnityEngine.UI;
 using TMPro;
 using DG.Tweening;
-using UnityEngine.SceneManagement;
 
 public class EndingPopup : MonoBehaviour
 {
@@ -19,10 +18,17 @@ public class EndingPopup : MonoBehaviour
         HideInstant();
     }
 
-    public void Show(string title, string message)
+    public void Show(string title, string message, string unlockId = "")
     {
         titleText.text = title;
         messageText.text = message;
+
+        if (!string.IsNullOrEmpty(unlockId))
+        {
+            var save = SaveManager.CurrentSave;
+            if (save != null)
+                EffectProcessor.ApplyEffects($"unlock:{unlockId}", save);
+        }
 
         // Backdrop 켜기(클릭 차단)
         if (backdrop) backdrop.SetActive(true);
@@ -52,7 +58,7 @@ public class EndingPopup : MonoBehaviour
                 .OnComplete(() =>
                 {
                     HideInstant();
-                    SceneManager.LoadScene(mainMenuSceneName);
+                    SceneNavigator.Load(mainMenuSceneName);
                 });
         });
     }

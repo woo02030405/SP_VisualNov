@@ -5,33 +5,31 @@ namespace VN.Dialogue
     [System.Serializable]
     public class DialogueNode
     {
-        public string NodeId;          // 노드 ID 
-        public string SpeakerId;       // 화자 ID 
-        public string Text;            // 실제 대사 텍스트 
+        public string Id;        // NodeId
+        public string Chapter;   // Chapter
+        public string Scene;     // Scene
+        public string SpeakerId;
+        public string Text;
+        public string NextNodeId;
+        public List<ChoiceOption> Choices = new();
 
-        // ---- 캐릭터 관련 (Dialogue.csv) ----
-        public string CharacterType;     // standing / bust / full
-        public string Expression;        // happy / sad / angry / neutral
-        public string Pose;              // stand / sit / battle
-        public string CharacterPosition; // left / center / right
-        public string CharacterEffect;   // fadein / fadeout / shake / flash
+        public string SkipFlag = "False";
+        public string TextEffect;
 
-        // ---- 사운드/연출 (Dialogue.csv) ----
-        public string Background;      // 배경 이미지
-        public string BGM;             // 배경 음악
-        public string VoiceId;         // 보이스 파일 ID
-        public string SFX;             // 효과음
-        public string Transition;      // 화면 전환 (fade, slide, crossfade)
+        public bool HasChoices => Choices != null && Choices.Count > 0;
 
-        // ---- 선택지 관련 (Dialogue.csv) ----
-        public List<ChoiceOption> Choices = new List<ChoiceOption>();
-        public string ChoiceAnimType;  // 선택지 애니메이션 (Default, Slide, Glow…)
-
-        // ---- 텍스트/플레이 제어 (Dialogue.csv) ----
-        public string TextEffect;      // 텍스트 출력 효과 (typewriter, shake, color 등)
-        public bool SkipFlag;          // 스킵 가능 여부
-
-        // ---- 흐름 제어 (Story.csv/Dialogue.csv 공통) ----
-        public string NextNodeId;      // 다음 노드 ID
+        // 리소스 연동 필드
+        public string Background;
+        public string BGM;
+        public string SFX;
+        public string VoiceId;
+        public string CharacterId;
+        public string Expression;
+        public string Pose;
+        public string CharacterPosition;
+        public string CharacterEffect;
+        public string AnimationId;
+        public string EventCG;
+        public string Transition;
     }
 }

@@ -1,24 +1,25 @@
-using UnityEngine;
+ï»¿using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 using System.Collections.Generic;
-using VN.Data; // CGRecord, CGCatalog »ç¿ë
+using VN.Data; // CGRecord, CGCatalog ì‚¬ìš©
+
 
 public class CGGalleryUI : MonoBehaviour
 {
     [Header("Data")]
-    public CGCatalog catalog;   // ScriptableObject (CG µ¥ÀÌÅÍ ¸ğÀ½)
+    public CGCatalog catalog;   // ScriptableObject (CG ë°ì´í„° ëª¨ìŒ)
 
     [Header("Slots (12 per page)")]
-    public List<Button> cgButtons;         // ¹öÆ° 12°³
-    public List<Image> cgThumbs;           // ½æ³×ÀÏ
-    public List<GameObject> lockOverlays;  // Àá±İ ¿À¹ö·¹ÀÌ
+    public List<Button> cgButtons;         // ë²„íŠ¼ 12ê°œ
+    public List<Image> cgThumbs;           // ì¸ë„¤ì¼
+    public List<GameObject> lockOverlays;  // ì ê¸ˆ ì˜¤ë²„ë ˆì´
 
-    [Header("Preview (È®´ë º¸±â)")]
-    public GameObject previewPanel;   // È®´ë ºä ÀüÃ¼ Panel
-    public Image fullImage;           // Å« ÀÌ¹ÌÁö
-    public TMP_Text titleText;        // Á¦¸ñ
-    public Button closeButton;        // ´İ±â ¹öÆ° (X)
+    [Header("Preview (í™•ëŒ€ ë³´ê¸°)")]
+    public GameObject previewPanel;   // í™•ëŒ€ ë·° ì „ì²´ Panel
+    public Image fullImage;           // í° ì´ë¯¸ì§€
+    public TMP_Text titleText;        // ì œëª©
+    public Button closeButton;        // ë‹«ê¸° ë²„íŠ¼ (X)
 
     [Header("Navigation")]
     public Button prevButton;
@@ -26,7 +27,7 @@ public class CGGalleryUI : MonoBehaviour
     public TMP_Text pageLabel;
 
     [Header("Canvas")]
-    public Button backButton;         // GalleryHubScene·Î µ¹¾Æ°¡´Â ¹öÆ°
+    public Button backButton;         // GalleryHubSceneë¡œ ëŒì•„ê°€ëŠ” ë²„íŠ¼
 
     [Header("Progress")]
     public TMP_Text progressText;
@@ -39,10 +40,10 @@ public class CGGalleryUI : MonoBehaviour
 
     void Start()
     {
-        // ¿ø·¡ PageLabel »ö ÀúÀå
+        // ì›ë˜ PageLabel ìƒ‰ ì €ì¥
         defaultLabelColor = pageLabel.color;
 
-        // ÆäÀÌÁö ÀÌµ¿ ¹öÆ°
+        // í˜ì´ì§€ ì´ë™ ë²„íŠ¼
         prevButton.onClick.AddListener(() =>
         {
             currentPage = Mathf.Max(0, currentPage - 1);
@@ -55,7 +56,7 @@ public class CGGalleryUI : MonoBehaviour
             RefreshAll();
         });
 
-        // ´İ±â ¹öÆ° ¡æ Preview ´İÀ» ¶§ ³×ºñ°ÔÀÌ¼Ç º¹¿ø
+        // ë‹«ê¸° ë²„íŠ¼ â†’ Preview ë‹«ì„ ë•Œ ë„¤ë¹„ê²Œì´ì…˜ ë³µì›
         closeButton.onClick.AddListener(() =>
         {
             previewPanel.SetActive(false);
@@ -66,12 +67,11 @@ public class CGGalleryUI : MonoBehaviour
             pageLabel.color = defaultLabelColor;
         });
 
-        // µÚ·Î°¡±â ¹öÆ° ¡æ ¸ŞÀÎ¸Ş´º ¾À ·Îµå
+        // ë’¤ë¡œê°€ê¸° ë²„íŠ¼ â†’ ë©”ì¸ë©”ë‰´ ì”¬ ë¡œë“œ
         backButton.onClick.AddListener(() =>
         {
-            var nav = FindObjectOfType<SceneNavigator>();
-            if (nav != null) nav.Load("GalleryHubScene");
-            // ¶Ç´Â UnityEngine.SceneManagement.SceneManager.LoadScene("MainMenuScene");
+            SceneNavigator.Load("GalleryHubScene");
+            // ë˜ëŠ” SceneNavigator.Load("MainMenuScene");
         });
 
         RefreshAll();
@@ -79,6 +79,8 @@ public class CGGalleryUI : MonoBehaviour
 
     void RefreshAll()
     {
+        var save = SaveManager.CurrentSave; 
+
         if (catalog == null || catalog.items.Count == 0)
         {
             pageLabel.text = "0 / 0";
@@ -86,15 +88,14 @@ public class CGGalleryUI : MonoBehaviour
             return;
         }
 
-        // ÆäÀÌÁö ¶óº§
-        pageLabel.text = $"{currentPage + 1} / {TotalPages}";
-
-        // ÁøÇàµµ
         int unlocked = 0;
-        foreach (var c in catalog.items) if (c.unlocked) unlocked++;
+        foreach (var c in catalog.items)
+        {
+            bool isUnlocked = save != null && save.IsCGUnlocked(c.id);
+            if (isUnlocked) unlocked++;
+        }
         progressText.text = $"Unlocked {unlocked} / {catalog.items.Count}";
 
-        // ½½·Ô Ã¤¿ì±â
         int start = currentPage * perPage;
         for (int i = 0; i < cgButtons.Count; i++)
         {
@@ -104,21 +105,23 @@ public class CGGalleryUI : MonoBehaviour
             if (!active) continue;
 
             var data = catalog.items[dataIndex];
-            cgThumbs[i].sprite = data.thumbnail;
-            lockOverlays[i].SetActive(!data.unlocked);
+            bool isUnlocked = save != null && save.IsCGUnlocked(data.id);
 
-            cgButtons[i].interactable = data.unlocked;
+            cgThumbs[i].sprite = isUnlocked ? data.thumbnail : null;
+            lockOverlays[i].SetActive(!isUnlocked);
+
+            cgButtons[i].interactable = isUnlocked;
             cgButtons[i].onClick.RemoveAllListeners();
-            if (data.unlocked)
+            if (isUnlocked)
             {
                 cgButtons[i].onClick.AddListener(() => ShowPreview(data));
             }
         }
 
-        // ¹öÆ° »óÅÂ
         prevButton.interactable = currentPage > 0;
         nextButton.interactable = currentPage < (TotalPages - 1);
     }
+
 
     void ShowPreview(CGRecord data)
     {
@@ -126,7 +129,7 @@ public class CGGalleryUI : MonoBehaviour
         fullImage.sprite = data.fullImage;
         titleText.text = data.title;
 
-        // ³×ºñ°ÔÀÌ¼Ç Àá±İ
+        // ë„¤ë¹„ê²Œì´ì…˜ ì ê¸ˆ
         prevButton.interactable = false;
         nextButton.interactable = false;
         backButton.interactable = false;

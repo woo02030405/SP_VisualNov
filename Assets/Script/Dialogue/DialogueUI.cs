@@ -1,80 +1,106 @@
-﻿using TMPro;
-using UnityEngine;
-using System;
-using System.Collections;
+﻿using UnityEngine;
+using TMPro;
 using UnityEngine.EventSystems;
+using System;
 
 namespace VN.UI
 {
     public class DialogueUI : MonoBehaviour, IPointerClickHandler
     {
-        [SerializeField] private TMP_Text nameText;
-        [SerializeField] private TMP_Text dialogueText;
-        [SerializeField] private GameObject nextIndicator;
+        [Header("UI References")]
+        [SerializeField] private CanvasGroup uiGroup;      // UI 전체를 묶는 캔버스 그룹
+        [SerializeField] private TMP_Text nameText;        // 캐릭터 이름
+        [SerializeField] private TMP_Text dialogueText;    // 대사
+        [SerializeField] private GameObject nextIndicator; // ▶ 표시 (다음으로 넘길 수 있을 때만 보이게)
 
         public event Action OnNextClicked;
 
-        private Coroutine typingCoroutine;
-        private bool isTyping;
+        private bool isHidden; // UI 숨김 상태
         private string fullText;
 
+        // ========================
+        // Speaker/Dialogue 표시
+        // ========================
         public void SetName(string speakerId)
         {
-            // 이름 & 색상 동시 적용
-            nameText.text = LocalizationManager.GetSpeakerName(speakerId);
-            nameText.color = LocalizationManager.GetSpeakerColor(speakerId);
-        }
-
-        public void SetDialogue(string text, float speed = 0.05f)
-        {
-            if (typingCoroutine != null) StopCoroutine(typingCoroutine);
-            fullText = text;
-            typingCoroutine = StartCoroutine(TypeText(fullText, speed));
-        }
-
-        IEnumerator TypeText(string text, float speed)
-        {
-            isTyping = true;
-            dialogueText.text = "";
-            if (nextIndicator) nextIndicator.SetActive(false);
-
-            foreach (char c in text)
+            if (nameText != null)
             {
-                dialogueText.text += c;
-                if (!SettingsManager.SkipMode)
-                    yield return new WaitForSeconds(speed);
+                nameText.text = LocalizationManager.GetSpeakerName(speakerId);
+                nameText.color = LocalizationManager.GetSpeakerColor(speakerId);
             }
-
-            isTyping = false;
-            if (nextIndicator) nextIndicator.SetActive(true);
         }
 
-        public void ClearNextEvent()
+        public void SetDialogue(string text)
         {
-            OnNextClicked = null;
+            fullText = text ?? "";
+            if (dialogueText != null)
+                dialogueText.text = fullText;
+
+            // 기본적으로는 다음 인디케이터 ON
+            ShowNextIndicator(true);
         }
 
+        public void ShowNextIndicator(bool show)
+        {
+            if (nextIndicator != null)
+                nextIndicator.SetActive(show);
+        }
+
+        // ========================
+        // UI 표시/숨김
+        // ========================
+        public void ToggleUI()
+        {
+            if (isHidden) ShowUI();
+            else HideUI();
+        }
+
+        public void HideUI()
+        {
+            isHidden = true;
+            if (uiGroup != null)
+            {
+                uiGroup.alpha = 0f;
+                uiGroup.interactable = false;
+                uiGroup.blocksRaycasts = false;
+            }
+        }
+
+        public void ShowUI()
+        {
+            isHidden = false;
+            if (uiGroup != null)
+            {
+                uiGroup.alpha = 1f;
+                uiGroup.interactable = true;
+                uiGroup.blocksRaycasts = true;
+            }
+        }
+
+        // ========================
+        // 입력 처리
+        // ========================
         public void OnPointerClick(PointerEventData eventData)
         {
-            if (isTyping)
-            {
-                if (typingCoroutine != null) StopCoroutine(typingCoroutine);
-                dialogueText.text = fullText;
-                isTyping = false;
-                if (nextIndicator) nextIndicator.SetActive(true);
-            }
-            else
-            {
-                OnNextClicked?.Invoke();
-            }
+            if (isHidden) return; // 숨겨진 상태에서는 클릭 무효
+            OnNextClicked?.Invoke();
         }
 
-        void Update()
+        private void Update()
         {
+            if (isHidden) return;
+
+            // 엔터키로 넘기기
             if (Input.GetKeyDown(KeyCode.Return))
-            {
-                OnPointerClick(null);
-            }
+                OnNextClicked?.Invoke();
+
+            // 좌클릭으로 넘기기
+            if (Input.GetMouseButtonDown(0))
+                OnNextClicked?.Invoke();
+
+            // 우클릭으로 UI 토글
+            if (Input.GetMouseButtonDown(1))
+                ToggleUI();
         }
     }
 }
