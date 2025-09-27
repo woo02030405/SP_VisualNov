@@ -10,11 +10,11 @@ public class EventGalleryUI : MonoBehaviour
     public EventCatalog catalog;
 
     [Header("Slots (6 buttons)")]
-    public List<Button> eventButtons;        // EventItem 6°³ ¹öÆ°
-    public List<Image> eventThumbs;         // °¢ ¹öÆ° ¾ÈÀÇ Thumb
-    public List<TMP_Text> eventTitles;       // °¢ ¹öÆ° ¾ÈÀÇ Title
-    public List<GameObject> lockOverlays;    // °¢ ¹öÆ° ¾ÈÀÇ LockOverlay
-
+    public List<Button> eventButtons;        // EventItem 6ê°œ ë²„íŠ¼
+    public List<Image> eventThumbs;         // ê° ë²„íŠ¼ ì•ˆì˜ Thumb
+    public List<TMP_Text> eventTitles;       // ê° ë²„íŠ¼ ì•ˆì˜ Title
+    public List<GameObject> lockOverlays;    // ê° ë²„íŠ¼ ì•ˆì˜ LockOverlay í•œê¸€
+    
     [Header("Preview")]
     public Image previewImage;
     public TMP_Text previewTitle;
@@ -35,7 +35,7 @@ public class EventGalleryUI : MonoBehaviour
 
     void Start()
     {
-        // ³×ºñ°ÔÀÌ¼Ç ¹öÆ° ÀÌº¥Æ® ¿¬°á
+        // ë„¤ë¹„ê²Œì´ì…˜ ë²„íŠ¼ ì´ë²¤íŠ¸ ì—°ê²°
         prevButton.onClick.AddListener(() => { currentPage = Mathf.Max(0, currentPage - 1); RefreshAll(); });
         nextButton.onClick.AddListener(() => { currentPage = Mathf.Min(TotalPages - 1, currentPage + 1); RefreshAll(); });
 
@@ -45,15 +45,15 @@ public class EventGalleryUI : MonoBehaviour
 
     void RefreshAll()
     {
-        // ÆäÀÌÁö ¶óº§
+        // í˜ì´ì§€ ë¼ë²¨
         pageLabel.text = $"{currentPage + 1} / {TotalPages}";
 
-        // ÁøÇàµµ (ÇØÁ¦µÈ °³¼ö / ÀüÃ¼)
+        // ì§„í–‰ë„ (í•´ì œëœ ê°œìˆ˜ / ì „ì²´)
         int unlocked = 0;
         foreach (var e in catalog.events) if (e.unlocked) unlocked++;
         progressText.text = $"Unlocked {unlocked} / {catalog.events.Count}";
 
-        // ½½·Ô 6°³ µ¥ÀÌÅÍ Ã¤¿ì±â
+        // ìŠ¬ë¡¯ 6ê°œ ë°ì´í„° ì±„ìš°ê¸°
         int start = currentPage * perPage;
         for (int i = 0; i < eventButtons.Count; i++)
         {
@@ -63,21 +63,21 @@ public class EventGalleryUI : MonoBehaviour
             if (!active) continue;
 
             var data = catalog.events[dataIndex];
-            // ºñÁÖ¾ó
+            // ë¹„ì£¼ì–¼
             if (eventThumbs[i]) eventThumbs[i].sprite = data.thumbnail;
             if (eventTitles[i]) eventTitles[i].text = data.unlocked ? data.title : "???";
             if (lockOverlays[i]) lockOverlays[i].SetActive(!data.unlocked);
 
-            // ÀÎÅÍ·¢¼Ç
+            // ì¸í„°ë™ì…˜
             eventButtons[i].interactable = data.unlocked;
 
-            // Å¬¸¯ ÇÚµé·¯ °»½Å
+            // í´ë¦­ í•¸ë“¤ëŸ¬ ê°±ì‹ 
             eventButtons[i].onClick.RemoveAllListeners();
             int capturedIndex = dataIndex;
             eventButtons[i].onClick.AddListener(() => OnClickEvent(capturedIndex));
         }
 
-        // Prev/Next »óÅÂ
+        // Prev/Next ìƒíƒœ
         prevButton.interactable = currentPage > 0;
         nextButton.interactable = currentPage < (TotalPages - 1);
     }
@@ -92,7 +92,7 @@ public class EventGalleryUI : MonoBehaviour
     {
         if (previewImage) previewImage.sprite = data.thumbnail;
         if (previewTitle) previewTitle.text = data.unlocked ? data.title : "???";
-        if (previewDesc) previewDesc.text = data.unlocked ? data.desc : "Àá±İ ÇØÁ¦ ÈÄ È®ÀÎ °¡´É";
+        if (previewDesc) previewDesc.text = data.unlocked ? data.desc : "ì ê¸ˆ í•´ì œ í›„ í™•ì¸ ê°€ëŠ¥";
 
         if (replayButton)
         {
@@ -115,7 +115,7 @@ public class EventGalleryUI : MonoBehaviour
         {
             if (e.unlocked) { UpdatePreview(e); return; }
         }
-        // ¸ğµÎ Àá±İÀÌ¸é Ã¹ Ç×¸ñÀ¸·Î
+        // ëª¨ë‘ ì ê¸ˆì´ë©´ ì²« í•­ëª©ìœ¼ë¡œ
         if (catalog.events.Count > 0) UpdatePreview(catalog.events[0]);
     }
 }
