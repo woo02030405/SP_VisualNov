@@ -1,0 +1,4 @@
+﻿Chapter,Scene,NodeId,Background,BGM,Characters,CharacterPositions,CharacterExpressions,Effects,Transition,SFX,Voice
+CH1,SC1,N001,BG_School,BGM_Intro,YUNA|HERO,Left|Right,Smile|Neutral,fadein,cut,,,
+CH1,SC1,N002,,,YUNA,,Angry,shake,,SFX_Punch,
+CH1,SC1,N003,BG_Classroom,BGM_Serious,MINJI,Center,Neutral,fadeout,fade,SFX_Door,VO_Minji_001

@@ -1,15 +1,15 @@
-namespace VN.Dialogue
+public class ChoiceOption
 {
-    [System.Serializable]
-    public class ChoiceOption
-    {
-        public string Text;        // 선택지 문구
-        public string NextNodeId;  // 선택 시 다음 노드
+    public string Text { get; private set; }
+    public string NextNodeId { get; private set; }
+    public string Conditions { get; private set; }
+    public string ChoiceStyle { get; private set; }
 
-        public ChoiceOption(string text, string nextNodeId)
-        {
-            Text = text;
-            NextNodeId = nextNodeId;
-        }
+    public ChoiceOption(string text, string nextNodeId, string conditions = "", string style = "Default")
+    {
+        Text = text;
+        NextNodeId = nextNodeId;
+        Conditions = conditions;
+        ChoiceStyle = string.IsNullOrEmpty(style) ? "Default" : style;
     }
 }

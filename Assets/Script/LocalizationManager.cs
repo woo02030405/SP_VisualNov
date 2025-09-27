@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
 
@@ -6,9 +6,9 @@ public static class LocalizationManager
 {
     private static Dictionary<string, string> speakers = new Dictionary<string, string>();
     private static Dictionary<string, Color> speakerColors = new Dictionary<string, Color>();
-    private static string currentLang = "ko";
+    private static string currentLang = "kr";
 
-    public static void LoadLanguage(string lang = "ko")
+    public static void LoadLanguage(string lang = "kr")
     {
         currentLang = lang;
         speakers.Clear();

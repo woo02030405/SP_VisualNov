@@ -1,0 +1,25 @@
+﻿Chapter,Scene,NodeId,SpeakerId,Text,Choices,NextNodeId
+CH1,SC1,N001,system,새 학기가 시작되었다.,
+CH1,SC1,N002,hero,뭔가 오늘 피곤하네...,
+CH1,SC1,N003,friend,"야, 방과 후에 게임하러 갈래?",
+CH1,SC1,N004,heroine1,안녕! 오늘 같이 공부할래?,
+CH1,SC1,Choice_001,heroine2,날씨가 정말 좋다. 산책하러 가지 않을래?,난 유리를 좋아해  => N005  <ch> 산책...?  => N009  <ch> 지후와 선약이 있어 => Choice_002,
+CH1,SC1,N005,hero,진심이야,
+CH1,SC1,N006,heroine1,진심이라고?.,
+CH1,SC1,Choice_002,hero,'지후와 선약이 있긴한데...',유리와 함께 한다 => N008 <ch> 민지에게 다가간다=> N009<ch> 지후와 논다 => N007,
+CH1,SC1,N007,friend,역시 넌 최고의 친구야!,,Choice_003
+CH1,SC1,N008,heroine1,어서 공부하러 가자,,Choice_003
+CH1,SC1,N009,heroine2,좀 걸을까?,
+CH1,SC1,Choice_003,system,"그런데 갑자기 지후가 다가오면서",유리의 뒤에 서있다  => N010 <ch> 민지의 옆에 을지나 내옆에 서있다 =>N011 <ch>  지후에게 먼저 말을 건다 => N012
+CH1,SC1,N010,hero,유리야 미안.,,N013
+CH1,SC1,N011,hero,민지야 잠시만.,,N013
+CH1,SC1,N012,hero,지후야 뭐해?,
+CH1,SC1,N013,friend,젠장 난 니가 예전부터 좋아했었다고!!,
+CH1,SC1,Choice_004,heroineAll,뭐? 너희 둘 언제 부터..?,유리야 오해야 => END_A <ch> 민지야 오해야 => N014 <ch> 지후야 사랑해 => END_C <ch> 이건 꿈이야 => Choice_005,
+CH1,SC1,N014,heroine2,니가 날 좋아할준 알았는데...,,END_B
+CH1,SC1,Choice_005,hero,이건 꿈이야!!!!!,유리야 몰래카메라! => END_A  <ch> 민지야 난 너밖에 없어 => END_B <ch> 지후이 씨발놈아 => END_C <ch> 지후 이 미친놈아 => END_D,
+CH1,SC1,END_A,heroine1,기분나빠,
+CH1,SC1,END_B,heroine2,우리친구로 지내는건 어때?,ED
+CH1,SC1,END_C,friend,미국가서 결혼할까?,ED
+CH1,SC1,END_D,hero,'죽일까?',ED
+

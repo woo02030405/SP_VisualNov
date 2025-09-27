@@ -1,79 +1,68 @@
-﻿using TMPro;
+using TMPro;
 using UnityEngine;
-using System;
-using System.Collections;
-using UnityEngine.EventSystems;
+using VN.Dialogue;
 
-namespace VN.UI
+namespace VN
 {
-    public class DialogueUI : MonoBehaviour, IPointerClickHandler
+    public class DialogueUI : MonoBehaviour
     {
-        [SerializeField] private TMP_Text nameText;
+        [SerializeField] private TMP_Text speakerNameText;
         [SerializeField] private TMP_Text dialogueText;
-        [SerializeField] private GameObject nextIndicator;
+        [SerializeField] private RectTransform nextIndicator; // ▶ 아이콘 (NextBlink 붙어있음)
 
-        public event Action OnNextClicked;
+        private System.Action onContinue;
 
-        private Coroutine typingCoroutine;
-        private bool isTyping;
-        private string fullText;
-
-        public void SetName(string speakerId)
+        void Awake()
         {
-            // 이름 & 색상 동시 적용
-            nameText.text = LocalizationManager.GetSpeakerName(speakerId);
-            nameText.color = LocalizationManager.GetSpeakerColor(speakerId);
+            if (nextIndicator != null)
+                nextIndicator.gameObject.SetActive(false); // 기본 꺼두기
         }
 
-        public void SetDialogue(string text, float speed = 0.05f)
+        /// <summary>
+        /// 대사 출력
+        /// </summary>
+        public void ShowLine(DialogueNode node, System.Action onComplete)
         {
-            if (typingCoroutine != null) StopCoroutine(typingCoroutine);
-            fullText = text;
-            typingCoroutine = StartCoroutine(TypeText(fullText, speed));
+            if (speakerNameText != null)
+                speakerNameText.text = LocalizationManager.GetSpeakerName(node.SpeakerId);
+
+            if (dialogueText != null)
+                dialogueText.text = node.Text;
+
+            onComplete?.Invoke();
         }
 
-        IEnumerator TypeText(string text, float speed)
+        /// <summary>
+        /// ▶ 아이콘을 대사 끝 위치에 표시, 클릭/엔터 입력 대기
+        /// </summary>
+        public void ShowNextIndicator(System.Action onClick)
         {
-            isTyping = true;
-            dialogueText.text = "";
-            if (nextIndicator) nextIndicator.SetActive(false);
+            onContinue = onClick;
 
-            foreach (char c in text)
+            if (nextIndicator != null && dialogueText != null)
             {
-                dialogueText.text += c;
-                if (!SettingsManager.SkipMode)
-                    yield return new WaitForSeconds(speed);
-            }
+                nextIndicator.gameObject.SetActive(true);
 
-            isTyping = false;
-            if (nextIndicator) nextIndicator.SetActive(true);
-        }
+                // 텍스트 끝 위치 계산
+                float textWidth = dialogueText.preferredWidth;
+                Vector3 basePos = dialogueText.rectTransform.position;
 
-        public void ClearNextEvent()
-        {
-            OnNextClicked = null;
-        }
-
-        public void OnPointerClick(PointerEventData eventData)
-        {
-            if (isTyping)
-            {
-                if (typingCoroutine != null) StopCoroutine(typingCoroutine);
-                dialogueText.text = fullText;
-                isTyping = false;
-                if (nextIndicator) nextIndicator.SetActive(true);
-            }
-            else
-            {
-                OnNextClicked?.Invoke();
+                // 오른쪽 끝 + 오프셋(15)
+                Vector3 newPos = basePos + new Vector3(textWidth / 2f + 15f, -dialogueText.preferredHeight / 2f, 0f);
+                nextIndicator.position = newPos;
             }
         }
 
         void Update()
         {
-            if (Input.GetKeyDown(KeyCode.Return))
+            if (onContinue != null && (Input.GetMouseButtonDown(0) || Input.GetKeyDown(KeyCode.Return)))
             {
-                OnPointerClick(null);
+                if (nextIndicator != null)
+                    nextIndicator.gameObject.SetActive(false); // 깜빡임 종료
+
+                var cb = onContinue;
+                onContinue = null;
+                cb?.Invoke(); // 다음 노드 실행
             }
         }
     }

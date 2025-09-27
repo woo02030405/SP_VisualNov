@@ -1,85 +1,56 @@
-﻿using UnityEngine;
-using UnityEngine.UI;
-using DG.Tweening;
+using UnityEngine;
+using VN.Dialogue;
 
-public class EffectManager : MonoBehaviour
+public static class EffectManager
 {
-    [Header("Overlay UI")]
-    [SerializeField] private Image fadePanel;      // 화면 전체 덮는 검은 패널
-    [SerializeField] private AudioSource bgmSource;
-    [SerializeField] private AudioSource sfxSource;
-
-    private void Awake()
+    // 조건 체크 (항상 true, 나중에 SaveData 연동)
+    public static bool CheckCondition(string condition)
     {
-        if (fadePanel != null)
+        if (string.IsNullOrEmpty(condition)) return true;
+
+        Debug.Log($"[EffectManager] Checking condition: {condition}");
+        return true; // 지금은 항상 true
+    }
+
+    // 단일 효과 적용
+    public static void ApplyEffect(string effect)
+    {
+        if (string.IsNullOrEmpty(effect)) return;
+
+        Debug.Log($"[EffectManager] Applying effect: {effect}");
+        // TODO: 나중에 SaveData 연동
+    }
+
+    // 여러 효과 처리
+    public static void ApplyEffects(string effects)
+    {
+        if (string.IsNullOrEmpty(effects)) return;
+
+        string[] tokens = effects.Split(';');
+        foreach (var eff in tokens)
         {
-            fadePanel.color = new Color(0, 0, 0, 0);
-            fadePanel.gameObject.SetActive(true);
+            ApplyEffect(eff.Trim());
         }
     }
 
-    // 🔹 BGM 재생
-    public void PlayBGM(string bgmName)
+    //  노드 단위 효과 적용
+    public static void ApplyNodeEffects(DialogueNode node, bool includeSkipPenalty)
     {
-        if (string.IsNullOrEmpty(bgmName)) return;
+        if (node == null) return;
 
-        AudioClip clip = Resources.Load<AudioClip>($"BGM/{bgmName}");
-        if (clip == null)
-        {
-            Debug.LogWarning($"[EffectManager] BGM not found: {bgmName}");
-            return;
-        }
+        if (!string.IsNullOrEmpty(node.Effects))
+            ApplyEffects(node.Effects);
 
-        bgmSource.clip = clip;
-        bgmSource.loop = true;
-        bgmSource.Play();
+        if (!string.IsNullOrEmpty(node.ElseIfEffects))
+            ApplyEffects(node.ElseIfEffects);
+
+        if (!string.IsNullOrEmpty(node.ElseEffects))
+            ApplyEffects(node.ElseEffects);
+
+        if (includeSkipPenalty && !string.IsNullOrEmpty(node.SkipPenalty))
+            ApplyEffects(node.SkipPenalty);
+
+        Debug.Log($"[EffectManager] Applied effects for Node={node.NodeId}, includeSkipPenalty={includeSkipPenalty}");
     }
 
-    // 🔹 효과음 재생
-    public void PlaySFX(string sfxName)
-    {
-        if (string.IsNullOrEmpty(sfxName)) return;
-
-        AudioClip clip = Resources.Load<AudioClip>($"SFX/{sfxName}");
-        if (clip == null)
-        {
-            Debug.LogWarning($"[EffectManager] SFX not found: {sfxName}");
-            return;
-        }
-
-        sfxSource.PlayOneShot(clip);
-    }
-
-    // 🔹 화면 전환
-    public void Transition(string type, float duration = 0.5f)
-    {
-        if (fadePanel == null) return;
-
-        switch (type?.ToLower())
-        {
-            case "fade":
-                fadePanel.color = new Color(0, 0, 0, 1);
-                fadePanel.DOFade(0, duration);
-                break;
-
-            case "fadeout":
-                fadePanel.color = new Color(0, 0, 0, 0);
-                fadePanel.DOFade(1, duration);
-                break;
-
-            case "flash":
-                fadePanel.color = new Color(1, 1, 1, 1);
-                fadePanel.DOFade(0, duration);
-                break;
-
-            case "slide":
-                // TODO: 슬라이드 전환 (패널 위치 이동 연출)
-                Debug.Log("[EffectManager] Slide transition not implemented");
-                break;
-
-            default:
-                // transition 없음
-                break;
-        }
-    }
 }

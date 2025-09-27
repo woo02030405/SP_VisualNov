@@ -1,4 +1,3 @@
-﻿// DialogueParser.cs
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -9,150 +8,171 @@ namespace VN.IO
 {
     public static class DialogueParser
     {
-        public static Dictionary<string, DialogueNode> LoadFromStreamingAssets(string lang = "ko")
-        {
-            string storyPath = Path.Combine(Application.streamingAssetsPath, "Story.csv");
-            string dialoguePath = Path.Combine(Application.streamingAssetsPath, $"Dialogue_{lang}.csv");
-            return LoadCsv(storyPath, dialoguePath);
-        }
-
+        // 내부적으로 노드를 저장하는 Dictionary
+        // Key = NodeId, Value = DialogueNode
         public static Dictionary<string, DialogueNode> LoadCsv(string storyCsvPath, string dialogueCsvPath)
         {
             var map = new Dictionary<string, DialogueNode>();
 
-            // ---- Story.csv (NodeId, SpeakerId, Text) ----
-            var storyLines = File.ReadAllLines(storyCsvPath);
-            var storyHeader = CsvSplit(storyLines[0]);
-            int idxNodeId = Array.IndexOf(storyHeader, "NodeId");
-            int idxSpeakerId = Array.IndexOf(storyHeader, "SpeakerId");
-            int idxText = Array.IndexOf(storyHeader, "Text");
-
-            for (int i = 1; i < storyLines.Length; i++)
+            // 1. Story CSV 먼저 로드
+            if (File.Exists(storyCsvPath))
             {
-                if (string.IsNullOrWhiteSpace(storyLines[i])) continue;
-                var cols = CsvSplit(storyLines[i]);
+                string[] lines = File.ReadAllLines(storyCsvPath);
 
-                var node = new DialogueNode
+                // 헤더 인덱스 확인
+                var headers = CsvSplit(lines[0]);
+                int sChapter = Array.IndexOf(headers, "Chapter");
+                int sScene = Array.IndexOf(headers, "Scene");
+                int sNodeId = Array.IndexOf(headers, "NodeId");
+                int sNodeType = Array.IndexOf(headers, "NodeType");
+                int sSpeaker = Array.IndexOf(headers, "SpeakerId");
+                int sText = Array.IndexOf(headers, "Text");
+                int sChoiceText = Array.IndexOf(headers, "ChoiceText");
+                int sNextNodeId = Array.IndexOf(headers, "NextNodeId");
+
+                for (int i = 1; i < lines.Length; i++)
                 {
-                    NodeId = Safe(cols, idxNodeId),
-                    SpeakerId = Safe(cols, idxSpeakerId),
-                    Text = Safe(cols, idxText) // ✅ 실제 대사
-                };
+                    if (string.IsNullOrWhiteSpace(lines[i])) continue;
+                    var cols = CsvSplit(lines[i]);
 
-                if (!string.IsNullOrEmpty(node.NodeId))
-                    map[node.NodeId] = node;
+                    string nodeId = Safe(cols, sNodeId);
+                    if (string.IsNullOrEmpty(nodeId))
+                    {
+                        Debug.LogWarning($"[Parser:Story] Missing NodeId at line {i + 1}: {lines[i]}");
+                        continue;
+                    }
+
+                    if (!map.TryGetValue(nodeId, out var node))
+                    {
+                        node = new DialogueNode { NodeId = nodeId, NodeType = "Dialogue" };
+                        map[nodeId] = node;
+                    }
+
+                    // NodeType (비어 있으면 Dialogue가 기본)
+                    string parsedType = Safe(cols, sNodeType);
+                    if (!string.IsNullOrEmpty(parsedType))
+                        node.NodeType = parsedType;
+
+                    // Choice_xxx_N → Choice 로 보정
+                    if (!string.IsNullOrEmpty(node.NodeType) && node.NodeType.StartsWith("Choice_"))
+                        node.NodeType = "Choice";
+
+                    node.Chapter = Safe(cols, sChapter);
+                    node.Scene = Safe(cols, sScene);
+                    node.SpeakerId = Safe(cols, sSpeaker);
+                    node.Text = Safe(cols, sText);
+                    node.ChoiceText = Safe(cols, sChoiceText);
+                    node.NextNodeId = Safe(cols, sNextNodeId);
+
+                    Debug.Log($"[Parser:Story] Node={node.NodeId} Type={node.NodeType} Speaker={node.SpeakerId}");
+                }
             }
 
-            // ---- Dialogue_xx.csv (NodeId, Text=ID, Choices, NextNodeId, 연출 관련) ----
-            var dlgLines = File.ReadAllLines(dialogueCsvPath);
-            var dlgHeader = CsvSplit(dlgLines[0]);
-
-            int dNodeId = Array.IndexOf(dlgHeader, "NodeId");
-            int dChoices = Array.IndexOf(dlgHeader, "Choices");
-            int dBg = Array.IndexOf(dlgHeader, "Background");
-            int dBgm = Array.IndexOf(dlgHeader, "BGM");
-            int dCharType = Array.IndexOf(dlgHeader, "CharacterType");
-            int dExpr = Array.IndexOf(dlgHeader, "Expression");
-            int dPose = Array.IndexOf(dlgHeader, "Pose");
-            int dPos = Array.IndexOf(dlgHeader, "CharacterPosition");
-            int dEff = Array.IndexOf(dlgHeader, "CharacterEffect");
-            int dVoice = Array.IndexOf(dlgHeader, "VoiceId");
-            int dSfx = Array.IndexOf(dlgHeader, "SFX");
-            int dTrans = Array.IndexOf(dlgHeader, "Transition");
-            int dAnim = Array.IndexOf(dlgHeader, "AnimType");
-            int dTextEff = Array.IndexOf(dlgHeader, "TextEffect");
-            int dSkip = Array.IndexOf(dlgHeader, "SkipFlag");
-            int dNext = Array.IndexOf(dlgHeader, "NextNodeId");
-
-            for (int i = 1; i < dlgLines.Length; i++)
+            // 2. Dialogue CSV 로드 (조건, 효과, 스타일)
+            if (File.Exists(dialogueCsvPath))
             {
-                if (string.IsNullOrWhiteSpace(dlgLines[i])) continue;
-                var cols = CsvSplit(dlgLines[i]);
-                string nodeId = Safe(cols, dNodeId);
-                if (string.IsNullOrEmpty(nodeId)) continue;
+                string[] dlgLines = File.ReadAllLines(dialogueCsvPath);
 
-                if (!map.TryGetValue(nodeId, out var node))
+                // 헤더 인덱스 확인
+                var headers = CsvSplit(dlgLines[0]);
+                int dChapter = Array.IndexOf(headers, "Chapter");
+                int dScene = Array.IndexOf(headers, "Scene");
+                int dNodeId = Array.IndexOf(headers, "NodeId");
+                int dNodeType = Array.IndexOf(headers, "NodeType");
+                int dSkipping = Array.IndexOf(headers, "Skipping");
+                int dTextEffect = Array.IndexOf(headers, "TextEffect");
+                int dConditions = Array.IndexOf(headers, "Conditions");
+                int dEffects = Array.IndexOf(headers, "Effects");
+                int dElseIfConditions = Array.IndexOf(headers, "ElseIfConditions");
+                int dElseIfEffects = Array.IndexOf(headers, "ElseIfEffects");
+                int dElseEffects = Array.IndexOf(headers, "ElseEffects");
+                int dSkipPenalty = Array.IndexOf(headers, "SkipPenalty");
+                int dFlagTag = Array.IndexOf(headers, "FlagTag");
+                int dChoiceStyle = Array.IndexOf(headers, "ChoiceStyle");
+
+                for (int i = 1; i < dlgLines.Length; i++)
                 {
-                    node = new DialogueNode { NodeId = nodeId };
-                    map[nodeId] = node;
-                }
+                    if (string.IsNullOrWhiteSpace(dlgLines[i])) continue;
+                    var cols = CsvSplit(dlgLines[i]);
 
-                // 🎯 Dialogue.csv의 Text는 ID라서 무시
-                // node.Text = Story.csv 의 실제 대사 유지
-
-                // 연출/효과 채움
-                node.Background = Safe(cols, dBg);
-                node.BGM = Safe(cols, dBgm);
-                node.CharacterType = Safe(cols, dCharType);
-                node.Expression = Safe(cols, dExpr);
-                node.Pose = Safe(cols, dPose);
-                node.CharacterPosition = Safe(cols, dPos);
-                node.CharacterEffect = Safe(cols, dEff);
-                node.VoiceId = Safe(cols, dVoice);
-                node.SFX = Safe(cols, dSfx);
-                node.Transition = Safe(cols, dTrans);
-                node.ChoiceAnimType = Safe(cols, dAnim);
-                node.TextEffect = Safe(cols, dTextEff);
-                node.NextNodeId = Safe(cols, dNext);
-
-                string skipRaw = Safe(cols, dSkip);
-                node.SkipFlag = string.Equals(skipRaw, "true", StringComparison.OrdinalIgnoreCase);
-
-                // 선택지
-                node.Choices.Clear();
-                string rawChoices = Safe(cols, dChoices);
-                if (!string.IsNullOrWhiteSpace(rawChoices))
-                {
-                    foreach (var p in rawChoices.Split(';'))
+                    string nodeId = Safe(cols, dNodeId);
+                    if (string.IsNullOrEmpty(nodeId))
                     {
-                        var kv = p.Split(':');
-                        if (kv.Length >= 2)
-                            node.Choices.Add(new ChoiceOption(kv[0].Trim(), kv[1].Trim()));
+                        Debug.LogWarning($"[Parser:Dialogue] Missing NodeId at line {i + 1}: {dlgLines[i]}");
+                        continue;
                     }
+
+                    if (!map.TryGetValue(nodeId, out var node))
+                    {
+                        node = new DialogueNode { NodeId = nodeId, NodeType = "Dialogue" };
+                        map[nodeId] = node;
+                    }
+
+                    // NodeType 보정
+                    string parsedType = Safe(cols, dNodeType);
+                    if (!string.IsNullOrEmpty(parsedType))
+                        node.NodeType = parsedType;
+                    if (!string.IsNullOrEmpty(node.NodeType) && node.NodeType.StartsWith("Choice_"))
+                        node.NodeType = "Choice";
+                    if (!string.IsNullOrEmpty(node.NodeType) && node.NodeType.StartsWith("END_"))
+                        node.NodeType = "End";
+
+                    // 값 할당
+                    node.Chapter = Safe(cols, dChapter);
+                    node.Scene = Safe(cols, dScene);
+                    node.Skipping = Safe(cols, dSkipping);
+                    node.TextEffect = Safe(cols, dTextEffect);
+                    node.Conditions = Safe(cols, dConditions);
+                    node.Effects = Safe(cols, dEffects);
+                    node.ElseIfConditions = Safe(cols, dElseIfConditions);
+                    node.ElseIfEffects = Safe(cols, dElseIfEffects);
+                    node.ElseEffects = Safe(cols, dElseEffects);
+                    node.SkipPenalty = Safe(cols, dSkipPenalty);
+                    node.FlagTag = Safe(cols, dFlagTag);
+
+                    // ChoiceStyle (비어 있으면 Default)
+                    string style = Safe(cols, dChoiceStyle);
+                    node.ChoiceStyle = string.IsNullOrEmpty(style) ? "Default" : style;
+
+                    Debug.Log($"[Parser:Dialogue] Node={node.NodeId} Type={node.NodeType}");
                 }
             }
 
             return map;
         }
 
-        // CSV utils
-        static string[] CsvSplit(string line)
+        // CSV 스플리터 (따옴표, 콤마 처리)
+        private static string[] CsvSplit(string line)
         {
             var list = new List<string>();
             bool inQuotes = false;
-            var cur = new System.Text.StringBuilder();
+            var cur = "";
 
-            for (int i = 0; i < line.Length; i++)
+            foreach (var c in line)
             {
-                char c = line[i];
-                if (c == '\"')
+                if (c == '"')
                 {
-                    if (inQuotes && i + 1 < line.Length && line[i + 1] == '\"')
-                    {
-                        cur.Append('\"');
-                        i++;
-                    }
-                    else
-                    {
-                        inQuotes = !inQuotes;
-                    }
+                    inQuotes = !inQuotes;
                 }
                 else if (c == ',' && !inQuotes)
                 {
-                    list.Add(cur.ToString());
-                    cur.Length = 0;
+                    list.Add(cur);
+                    cur = "";
                 }
                 else
                 {
-                    cur.Append(c);
+                    cur += c;
                 }
             }
-
-            list.Add(cur.ToString());
+            list.Add(cur);
             return list.ToArray();
         }
 
-        static string Safe(string[] cols, int idx)
-            => (idx >= 0 && idx < cols.Length) ? cols[idx]?.Trim().Trim('\r', '\n') : string.Empty;
+        // 안전하게 배열 접근
+        private static string Safe(string[] cols, int idx)
+        {
+            if (idx < 0 || idx >= cols.Length) return "";
+            return cols[idx].Trim();
+        }
     }
 }
