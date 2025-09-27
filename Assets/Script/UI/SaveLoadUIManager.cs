@@ -2,7 +2,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 using System.Collections.Generic;
-using VN.SaveSystem; // SaveManager, SaveData ÂüÁ¶
+using VN.SaveSystem; // SaveManager, SaveData ì°¸ì¡° 
 
 public class SaveLoadUIManager : MonoBehaviour
 {
@@ -26,12 +26,12 @@ public class SaveLoadUIManager : MonoBehaviour
     private int currentPage = 0;
     private const int slotsPerPage = 10;
 
-    // Save/Load ¸ğµå (true = Save, false = Load)
+    // Save/Load ëª¨ë“œ (true = Save, false = Load)
     public bool isSaveMode = false;
 
     void Start()
     {
-        // ÆäÀÌÁö ¹öÆ° ÀÌº¥Æ®
+        // í˜ì´ì§€ ë²„íŠ¼ ì´ë²¤íŠ¸
         prevButton.onClick.AddListener(() =>
         {
             currentPage = Mathf.Max(0, currentPage - 1);
@@ -88,12 +88,12 @@ public class SaveLoadUIManager : MonoBehaviour
         titleText.text = isSaveMode ? "SAVE" : "LOAD";
 
         // Footer
-        infoText.text = isSaveMode ? "°ÔÀÓ µ¥ÀÌÅÍ¸¦ ÀúÀåÇÕ´Ï´Ù." : "°ÔÀÓ µ¥ÀÌÅÍ¸¦ ºÒ·¯¿É´Ï´Ù.";
+        infoText.text = isSaveMode ? "ê²Œì„ ë°ì´í„°ë¥¼ ì €ì¥í•©ë‹ˆë‹¤." : "ê²Œì„ ë°ì´í„°ë¥¼ ë¶ˆëŸ¬ì˜µë‹ˆë‹¤.";
 
         // NavigationBar
         pageLabel.text = $"{currentPage + 1} / {TotalPages}";
 
-        // ½½·Ô Ã¤¿ì±â
+        // ìŠ¬ë¡¯ ì±„ìš°ê¸°
         var slots = SaveManager.Instance.GetSlotsForPage(currentPage, slotsPerPage);
 
         for (int i = 0; i < slotsPerPage; i++)
