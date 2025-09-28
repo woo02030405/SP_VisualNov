@@ -1,0 +1,35 @@
+﻿Chapter,Day,NodeId,SpeakerId,Text,ChoiceText,ElseEffectsMessage,SkipPenaltyMessage,describe
+CH1,1,S1_N001,system,새 학기가 시작되었다.,,,,
+CH1,1,S1_N002,hero,뭔가 오늘 피곤하네...,,,,
+CH1,1,S1_N003,friend,"야, 방과 후에 게임하러 갈래?",,,,
+CH1,1,S1_N004,heroine1,안녕! 오늘 같이 공부할래?,,,,
+CH1,1,S1_N005,heroine2,날씨가 정말 좋다. 산책하러 가지 않을래?,난 유리를 좋아해 ,,,SC1_N008
+CH1,1,S1_N006,heroine2,날씨가 정말 좋다. 산책하러 가지 않을래?,산책...? ,민지 ♡-1,,Choice_002
+CH1,1,S1_N007,heroine2,날씨가 정말 좋다. 산책하러 가지 않을래?,지후와 선약이 있어,,지호 ♡ -1,Choice_002
+CH1,1,S1_N008,hero,진심이야.,,,,
+CH1,1,S1_N009,heroine1,진심이라고?.,,,,N016
+CH1,1,S1_N010,hero,지후와 선약이 있긴한데...,유리와 함께 한다,,,N014
+CH1,1,S1_N011,hero,지후와 선약이 있긴한데...,민지에게 다가간다,민지 ♡-2,,N015
+CH1,1,S1_N012,hero,지후와 선약이 있긴한데...,지후와 논다,,,N015
+CH1,1,S1_N013,friend,역시 넌 최고의 친구야!,,,,Choice_003
+CH1,1,S1_N014,heroine1,어서 공부하러 가자,,,,Choice_003
+CH1,1,S1_N015,heroine2,좀 걸을까?,,,,
+CH1,1,S1_N016,system,그런데 갑자기 지후가 다가오면서,유리의 뒤에 서있다,,,N019
+CH1,1,S1_N017,system,그런데 갑자기 지후가 다가오면서,민지의 옆에 을지나 내옆에 서있다,,,N020
+CH1,1,S1_N018,system,그런데 갑자기 지후가 다가오면서,지후에게 먼저 말을 건다,,,N021
+CH1,1,S1_N019,hero,유리야 미안.,,,,N023
+CH1,1,S1_N020,hero,민지야 잠시만.,,,,N024
+CH1,1,S1_N021,hero,지후야 뭐해?,,,,
+CH1,1,S1_N022,friend,젠장 난 니가 예전부터 좋아했었다고!!,,,,
+CH1,1,S1_N023,heroineAll,뭐? 너희 둘 언제부터...?,유리야 오해야,,,END_A
+CH1,1,S1_N024,heroineAll,뭐? 너희 둘 언제부터...?,민지야 오해야 ,,,N027
+CH1,1,S1_N025,heroineAll,뭐? 너희 둘 언제부터...?,지후야 사랑해,,,END_C
+CH1,1,S1_N026,heroineAll,뭐? 너희 둘 언제부터...?,이건 꿈이야,,,Choice_005
+CH1,1,S1_N028,hero,이건 꿈이야!!!!!,유리야 몰래카메라!,,,END_A
+CH1,1,S1_N029,hero,이건 꿈이야!!!!!,민지야 난 너밖에 없어,,,END_B
+CH1,1,S1_N030,hero,이건 꿈이야!!!!!,지후 이 씨발놈아,,,END_C
+CH1,1,S1_N031,hero,이건 꿈이야!!!!!,지후 이 미친놈아,,,END_D
+CH1,1,S1_N032,heroine1,기분 나빠,,,,ED
+CH1,1,S1_N033,heroine2,우리 친구로 지내는 건 어때?,,,,ED
+CH1,1,S1_N034,friend,미국 가서 결혼할까?,,,,ED
+CH1,1,S1_N035,hero,죽일까?,,,,ED

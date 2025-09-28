@@ -1,80 +1,73 @@
-﻿using TMPro;
 using UnityEngine;
-using System;
-using System.Collections;
-using UnityEngine.EventSystems;
+using TMPro;
+using UnityEngine.UI;
+using System.Collections.Generic;
 
-namespace VN.UI
+public class DialogueUI : MonoBehaviour
 {
-    public class DialogueUI : MonoBehaviour, IPointerClickHandler
+    [Header("Dialogue UI")]
+    public TMP_Text speakerNameText;
+    public TMP_Text dialogueText;
+
+    [Header("Choice UI")]
+    public GameObject choiceButtonPrefab;
+    public Transform choiceContainer;
+
+    private readonly List<GameObject> spawnedChoices = new List<GameObject>();
+
+    public System.Action onClickNext; // DialogueManager에서 연결
+
+    void Update()
     {
-        [SerializeField] private TMP_Text nameText;
-        [SerializeField] private TMP_Text dialogueText;
-        [SerializeField] private GameObject nextIndicator;
-
-        public event Action OnNextClicked;
-
-        private Coroutine typingCoroutine;
-        private bool isTyping;
-        private string fullText;
-
-        public void SetName(string speakerId)
+        // Enter
+        if (Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter))
         {
-            // 이름 & 색상 동시 적용
-            nameText.text = LocalizationManager.GetSpeakerName(speakerId);
-            nameText.color = LocalizationManager.GetSpeakerColor(speakerId);
+            if (!HasChoices()) onClickNext?.Invoke();
         }
 
-        public void SetDialogue(string text, float speed = 0.05f)
+        // 화면 전체 클릭
+        if (Input.GetMouseButtonDown(0))
         {
-            if (typingCoroutine != null) StopCoroutine(typingCoroutine);
-            fullText = text;
-            typingCoroutine = StartCoroutine(TypeText(fullText, speed));
+            if (!HasChoices()) onClickNext?.Invoke();
+        }
+    }
+
+    public void ShowDialogue(string speakerName, string text)
+    {
+        speakerNameText.text = speakerName;
+        dialogueText.text = text;
+        ClearChoices(); // 대사 출력 시 기존 선택지는 제거
+    }
+
+    public void ShowChoices(List<(string text, System.Action callback)> choices)
+    {
+        ClearChoices();
+
+        if (choiceButtonPrefab == null || choiceContainer == null)
+        {
+            Debug.LogError("[DialogueUI] choiceButtonPrefab or choiceContainer 미연결");
+            return;
         }
 
-        IEnumerator TypeText(string text, float speed)
+        foreach (var choice in choices)
         {
-            isTyping = true;
-            dialogueText.text = "";
-            if (nextIndicator) nextIndicator.SetActive(false);
+            var btnObj = Object.Instantiate(choiceButtonPrefab, choiceContainer);
+            var btnText = btnObj.GetComponentInChildren<TMP_Text>();
+            var button = btnObj.GetComponent<Button>();
 
-            foreach (char c in text)
-            {
-                dialogueText.text += c;
-                if (!SettingsManager.SkipMode)
-                    yield return new WaitForSeconds(speed);
-            }
+            if (btnText != null) btnText.text = choice.text;
+            if (button != null) button.onClick.AddListener(() => choice.callback?.Invoke());
 
-            isTyping = false;
-            if (nextIndicator) nextIndicator.SetActive(true);
+            spawnedChoices.Add(btnObj);
         }
+    }
 
-        public void ClearNextEvent()
-        {
-            OnNextClicked = null;
-        }
+    public bool HasChoices() => spawnedChoices.Count > 0;
 
-        public void OnPointerClick(PointerEventData eventData)
-        {
-            if (isTyping)
-            {
-                if (typingCoroutine != null) StopCoroutine(typingCoroutine);
-                dialogueText.text = fullText;
-                isTyping = false;
-                if (nextIndicator) nextIndicator.SetActive(true);
-            }
-            else
-            {
-                OnNextClicked?.Invoke();
-            }
-        }
-
-        void Update()
-        {
-            if (Input.GetKeyDown(KeyCode.Return))
-            {
-                OnPointerClick(null);
-            }
-        }
+    public void ClearChoices()
+    {
+        for (int i = 0; i < spawnedChoices.Count; i++)
+            Destroy(spawnedChoices[i]);
+        spawnedChoices.Clear();
     }
 }

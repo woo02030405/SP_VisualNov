@@ -1,120 +1,145 @@
-﻿using UnityEngine;
+using UnityEngine;
 using System.Collections.Generic;
-using VN.UI;
-using DG.Tweening;
 
-namespace VN.Dialogue
+public class DialogueManager : MonoBehaviour
 {
-    public class DialogueManager : MonoBehaviour
+    private Dictionary<string, DialogueNode> dialogueNodes;
+    private Dictionary<string, StoryLine> storyLines;
+    private Dictionary<string, Speaker> speakers;
+
+    [SerializeField] private string startNodeId = "S1_N001";
+    private string currentNodeId;
+
+    [Header("References")]
+    public DialogueUI dialogueUI;
+
+    private void Start()
     {
-        [SerializeField] private DialogueUI dialogueUI;
-        [SerializeField] private ChoiceUIManager choiceUIManager;
-        [SerializeField] private EffectManager effectManager;
-        [SerializeField] private DialogueBoxIntro dialogueBoxIntro;
-        [SerializeField] private ChoicePanelIntro choicePanelIntro;
-
-        private Dictionary<string, DialogueNode> nodeMap;
-        private DialogueNode currentNode;
-        private string lastSpeakerId = null;
-
-        public void Load(Dictionary<string, DialogueNode> map, string startNode)
+        if (dialogueUI == null)
         {
-            nodeMap = map;
-            if (nodeMap.TryGetValue(startNode, out currentNode))
-                ShowNode(currentNode);
-            else
-                Debug.LogError($"Start node {startNode} not found!");
+            Debug.LogError("[DialogueManager] dialogueUI 참조가 없음");
+            enabled = false; return;
         }
 
-        private void ShowNode(DialogueNode node)
+        dialogueNodes = CSVLoader.LoadTable<DialogueNode>("Ch1_MainDialogue", "NodeId");
+        storyLines = CSVLoader.LoadTable<StoryLine>("Ch1_MainStory_kr", "NodeId");
+        speakers = CSVLoader.LoadTable<Speaker>("Speakers_kr", "SpeakerId");
+
+        if (dialogueNodes == null || storyLines == null || speakers == null)
         {
-            currentNode = node;
+            Debug.LogError("[DialogueManager] CSV 로드 실패");
+            enabled = false; return;
+        }
 
-            // 대사창 연출
-            if (dialogueBoxIntro != null && (lastSpeakerId == null || node.SpeakerId != lastSpeakerId))
+        dialogueUI.onClickNext = Next;
+
+        currentNodeId = !string.IsNullOrEmpty(startNodeId) ? startNodeId : FindFirstNodeId();
+        if (string.IsNullOrEmpty(currentNodeId))
+        {
+            Debug.LogError("[DialogueManager] 시작 노드 없음");
+            enabled = false; return;
+        }
+
+        ShowCurrentNode();
+    }
+
+    private string FindFirstNodeId()
+    {
+        foreach (var kv in storyLines) return kv.Key;
+        return null;
+    }
+
+    private void ShowCurrentNode()
+    {
+        if (!storyLines.ContainsKey(currentNodeId))
+        {
+            Debug.Log("스토리 종료 → 맵 이동");
+            return;
+        }
+
+        var line = storyLines[currentNodeId];
+        DialogueNode node = dialogueNodes.ContainsKey(currentNodeId) ? dialogueNodes[currentNodeId] : null;
+
+        var spk = speakers.ContainsKey(line.SpeakerId) ? speakers[line.SpeakerId] : new Speaker { Name = "???" };
+        string processed = (node != null) ? DialogueTextEffect.Apply(line.Text, node.TextEffect) : line.Text;
+
+        dialogueUI.ShowDialogue(spk.Name, processed);
+
+        // ChoiceGroup 기반으로 같은 묶음의 Choice 노드 모두 버튼 생성
+        var choiceIds = CollectChoiceGroupByDialogue(currentNodeId);
+        if (choiceIds.Count > 0)
+        {
+            var items = new List<(string, System.Action)>();
+            foreach (var cid in choiceIds)
             {
-                dialogueBoxIntro.PlayIn();
+                string label = storyLines.ContainsKey(cid) ? storyLines[cid].ChoiceText : cid;
+                items.Add((label, () => SelectChoice(cid)));
             }
+            dialogueUI.ShowChoices(items);
+        }
+    }
 
-            // 이름/색상 + 대사 출력
-            dialogueUI.SetName(node.SpeakerId);
-            dialogueUI.SetDialogue(node.Text, SettingsManager.TextSpeed);
-            lastSpeakerId = node.SpeakerId;
+    // 현재 노드가 Choice면, 같은 Chapter/Day + ChoiceGroup의 모든 Choice 노드 모음
+    private List<string> CollectChoiceGroupByDialogue(string currentId)
+    {
+        var list = new List<string>();
+        if (!dialogueNodes.ContainsKey(currentId)) return list;
 
-            dialogueUI.ClearNextEvent();
-            CancelInvoke(nameof(AutoProceed));
+        var cur = dialogueNodes[currentId];
 
-            // 🔹 캐릭터 이미지 교체
-            var charMgr = FindObjectOfType<CharacterManager>();
-            if (charMgr != null)
+        bool isChoice = !string.IsNullOrEmpty(cur.NodeType) && cur.NodeType.StartsWith("Choice");
+        if (!isChoice) return list;
+
+        string group = cur.ChoiceGroup?.Trim();
+        if (string.IsNullOrEmpty(group))
+        {
+            // 그룹 미지정 → 단일 선택지
+            list.Add(currentId);
+            return list;
+        }
+
+        foreach (var kv in dialogueNodes)
+        {
+            var n = kv.Value;
+            if (n.Chapter == cur.Chapter && n.Day == cur.Day &&
+                !string.IsNullOrEmpty(n.NodeType) && n.NodeType.StartsWith("Choice") &&
+                (n.ChoiceGroup?.Trim() == group))
             {
-                charMgr.ShowCharacter(node.SpeakerId, node.CharacterType, node.Expression, node.Pose, node.CharacterPosition, node.CharacterEffect);
-            }
-
-            // 🔹 선택지 처리
-            if (node.Choices != null && node.Choices.Count > 0)
-            {
-                choiceUIManager.ShowChoices(node.Choices, node.ChoiceAnimType, OnChoiceSelected);
-
-                if (choicePanelIntro != null)
-                {
-                    choicePanelIntro.PlayIn();
-                    var cg = choicePanelIntro.GetComponent<CanvasGroup>();
-                    if (cg != null)
-                    {
-                        cg.interactable = true;
-                        cg.blocksRaycasts = true;
-                    }
-                }
-            }
-            else
-            {
-                dialogueUI.OnNextClicked += () =>
-                {
-                    if (!string.IsNullOrEmpty(node.NextNodeId) &&
-                        nodeMap.TryGetValue(node.NextNodeId, out var next))
-                    {
-                        ShowNode(next);
-                    }
-                    else
-                    {
-                        HandleEnding();
-                    }
-                };
-
-                if (SettingsManager.AutoModeEnabled)
-                    Invoke(nameof(AutoProceed), SettingsManager.AutoDelay);
+                list.Add(n.NodeId);
             }
         }
 
-        private void AutoProceed()
+        list.Sort();
+        return list;
+    }
+
+    private void SelectChoice(string choiceNodeId)
+    {
+        // TODO: Conditions/Effects/ElseIf.../SkipPenalty 처리
+
+        if (!dialogueNodes.TryGetValue(choiceNodeId, out var choiceNode) || string.IsNullOrEmpty(choiceNode.NextNodeId))
         {
-            if (!string.IsNullOrEmpty(currentNode.NextNodeId) &&
-                nodeMap.TryGetValue(currentNode.NextNodeId, out var next))
-            {
-                ShowNode(next);
-            }
-            else
-            {
-                HandleEnding();
-            }
+            Debug.LogWarning($"[DialogueManager] 선택 노드/Next 없음: {choiceNodeId}");
+            return;
         }
 
-        private void OnChoiceSelected(string nextNodeId)
-        {
-            if (!string.IsNullOrEmpty(nextNodeId) && nodeMap.TryGetValue(nextNodeId, out var next))
-                ShowNode(next);
-            else
-                HandleEnding();
-        }
+        // 먼저 선택지 제거(HasChoices 가드 회피)
+        dialogueUI.ClearChoices();
 
-        private void HandleEnding()
-        {
-            var popup = FindObjectOfType<EndingPopup>();
-            if (popup != null)
-                popup.Show("엔딩", "게임이 끝났습니다!");
-            else
-                Debug.Log("게임 종료: 엔딩 팝업 없음");
-        }
+        currentNodeId = choiceNode.NextNodeId;
+        ShowCurrentNode();
+    }
+
+    public void Next()
+    {
+        // 선택지가 떠 있으면 화면 클릭/엔터 무시 (버튼으로만)
+        if (dialogueUI != null && dialogueUI.HasChoices()) return;
+
+        if (!dialogueNodes.ContainsKey(currentNodeId)) { Debug.Log("다음 없음 → 맵"); return; }
+        var node = dialogueNodes[currentNodeId];
+        if (string.IsNullOrEmpty(node.NextNodeId)) { Debug.Log("스토리 종료 → 맵"); return; }
+
+        currentNodeId = node.NextNodeId;
+        ShowCurrentNode();
     }
 }
