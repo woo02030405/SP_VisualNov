@@ -7,10 +7,10 @@ public class DialogueNode
     public string Day;
     public string NodeId;
     public string NodeType;     // Dialogue / Choice / END ...
-    public string ChoiceGroup;  // ★ 동일 그룹 선택지 묶음 ID
+    public string ChoiceGroup;  // Choice 묶음 ID
     public string NextNodeId;
 
-    public string TextEffect;   // "color=#66CCFF;shake" 등
+    public string TextEffect;
 
     public string Conditions;
     public string Effects;
@@ -19,7 +19,11 @@ public class DialogueNode
     public string ElseEffects;
     public string SkipPenalty;
     public string FlagTag;
-    public string ChoiceStyle;
+
+    public string ChoiceStyle;   // ← 선택 연출 프리셋
+    public string ChoiceArgs;    // ← 선택 연출 파라미터 (key=value;..)
+    public string ChoiceFlags;   // ← 선택 기믹 토글 (avoid;shakeOnFail;..)
+
     public string Skipping;
     public string SavePointFlag;
 }
@@ -33,9 +37,9 @@ public class StoryLine
     public string SpeakerId;
     public string Text;
     public string ChoiceText;           // 버튼 라벨
-    public string ElseEffectsMessage;   // 선택지 옆 안내
-    public string SkipPenaltyMessage;   // 선택지 옆 경고
-    public string Describe;             // (보존용)
+    public string ElseEffectsMessage;   // 실패 메시지(선택지 옆/가까이)
+    public string SkipPenaltyMessage;
+    public string Describe;
 }
 
 [System.Serializable]
