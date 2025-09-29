@@ -16,11 +16,13 @@ namespace Game.OverlayUI
         public OverlayConfirmDialog confirmPrefab;
         public Transform dialogLayer;
 
+        [Header("Overlay")]
+        [Tooltip("씬에 있는 Blocker 오브젝트를 드래그해서 연결하세요.")]
+        public GameObject blocker;
+
         [Header("Auto-Find (Optional)")]
         [Tooltip("panel이 비었을 때 이 이름으로 자식/부모 쪽에서 MenuPanel을 탐색합니다.")]
         public string panelObjectName = "MenuPanel";
-
-        bool pushed; // UIBlocker.Push 여부
 
         void Awake()
         {
@@ -31,21 +33,21 @@ namespace Game.OverlayUI
             if (settingsBtn) settingsBtn.onClick.AddListener(OpenSettings);
             if (toTitleBtn) toTitleBtn.onClick.AddListener(ConfirmToTitle);
             if (quitBtn) quitBtn.onClick.AddListener(ConfirmQuit);
+
+            if (blocker) blocker.SetActive(false);
         }
 
-        // ★ panel이 비었거나 Missing이면 자동으로 찾아봄
+        // panel이 비었거나 Missing이면 자동으로 찾아봄
         void EnsurePanel()
         {
             if (panel != null) return;
 
-            // 1) 자식에서 먼저
             if (!string.IsNullOrEmpty(panelObjectName))
             {
                 var t = transform.Find(panelObjectName);
                 if (t) panel = t.gameObject;
             }
 
-            // 2) 부모/자손 전체 탐색
             if (panel == null && !string.IsNullOrEmpty(panelObjectName))
             {
                 var candidates = GetComponentsInChildren<RectTransform>(true);
@@ -79,28 +81,24 @@ namespace Game.OverlayUI
                 return;
             }
 
-            Debug.Log($"[OverlayMenuController] Toggle({on}), panel.activeSelf={panel.activeSelf}");
-
             panel.SetActive(on);
             Time.timeScale = on ? 0f : 1f;
 
-            if (on && !pushed) { UIBlocker.Push(); pushed = true; }
-            if (!on && pushed) { UIBlocker.Pop(); pushed = false; }
+            if (blocker) blocker.SetActive(on);
 
             Debug.Log($"[Menu] {(on ? "OPEN" : "CLOSE")}");
         }
 
-
         void OnDisable()
         {
-            if (pushed) { UIBlocker.Pop(); pushed = false; }
             Time.timeScale = 1f;
+            if (blocker) blocker.SetActive(false);
         }
 
         void OnDestroy()
         {
-            if (pushed) { UIBlocker.Pop(); pushed = false; }
             Time.timeScale = 1f;
+            if (blocker) blocker.SetActive(false);
         }
 
         void OpenSettings()
@@ -143,7 +141,7 @@ namespace Game.OverlayUI
 
             var parent = dialogLayer ? dialogLayer : transform.parent;
             var d = Instantiate(confirmPrefab);
-            d.transform.SetParent(parent, false); // worldPositionStays = false → RectTransform 유지
+            d.transform.SetParent(parent, false);
 
             d.gameObject.SetActive(true);
             d.Setup(msg, ok, cancel);

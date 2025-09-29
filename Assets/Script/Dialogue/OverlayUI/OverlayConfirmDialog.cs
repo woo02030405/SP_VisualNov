@@ -30,6 +30,9 @@ namespace Game.OverlayUI
 
         void OnEnable()
         {
+            // UIBlocker 활성화 (팝업 열렸을 때 뒤 클릭 방지)
+            UIBlocker.Push();
+
             // 진입 애니메이션 재생
             if (cg) { cg.alpha = 0f; cg.DOFade(1f, 0.15f).SetUpdate(true); }
             if (panel)
@@ -37,10 +40,7 @@ namespace Game.OverlayUI
                 panel.localScale = Vector3.one * 0.9f;
                 panel.DOScale(1f, 0.2f).SetEase(Ease.OutBack).SetUpdate(true);
             }
-            UIBlocker.Push();
         }
-
-
 
         public void Setup(string msg, string okText = "확인", string cancelText = null)
         {
@@ -78,6 +78,7 @@ namespace Game.OverlayUI
 
         void OnDestroy()
         {
+            // UIBlocker 해제 (팝업 닫혔을 때 뒤 클릭 허용)
             UIBlocker.Pop();
         }
     }

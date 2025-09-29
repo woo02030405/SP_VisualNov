@@ -1,8 +1,8 @@
 ﻿Chapter,Day,NodeId,SpeakerId,Text,ChoiceText,ElseEffectsMessage,SkipPenaltyMessage,describe
 CH1,1,S1_N001,system,새 학기가 시작되었다.,,,,
 CH1,1,S1_N002,hero,뭔가 오늘 피곤하네...,,,,
-CH1,1,S1_N003,friend,"야, 방과 후에 게임하러 갈래?",,,,
-CH1,1,S1_N004,heroine1,안녕! 오늘 같이 공부할래?,,,,
+CH1,1,S1_N003,friend,"야,게임하러 갈래?",,,,
+CH1,1,S1_N004,heroine1,안녕! 나랑 같이 공부할래?,,,,
 CH1,1,S1_N005,heroine2,날씨가 정말 좋다. 산책하러 가지 않을래?,난 유리를 좋아해 ,,,SC1_N008
 CH1,1,S1_N006,heroine2,날씨가 정말 좋다. 산책하러 가지 않을래?,산책...? ,민지 ♡-1,,Choice_002
 CH1,1,S1_N007,heroine2,날씨가 정말 좋다. 산책하러 가지 않을래?,지후와 선약이 있어,,지호 ♡ -1,Choice_002

@@ -34,7 +34,7 @@ public class DialogueUI : MonoBehaviour
 
     private void Update()
     {
-        // 모달/메뉴가 열려 있으면 입력 막기
+        // Blocker 활성화 상태면 입력 차단
         if (UIBlocker.IsBlocked) return;
 
         // 마우스가 UI 위면 클릭을 진행 입력으로 취급하지 않음

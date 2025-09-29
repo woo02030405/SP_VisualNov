@@ -319,6 +319,7 @@ MonoBehaviour:
   okButton: {fileID: 3888230782718138648}
   cancelButton: {fileID: 6690946823310975315}
   cancelObj: {fileID: 0}
+  blocker: {fileID: 0}
 --- !u!1 &1331098185325789707
 GameObject:
   m_ObjectHideFlags: 0
