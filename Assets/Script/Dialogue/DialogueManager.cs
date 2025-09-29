@@ -15,6 +15,10 @@ public class DialogueManager : MonoBehaviour
     private bool _awaitingAdvance = false;
     private string _queuedNextNodeId = null;
 
+    // END 노드 처리: 대사 먼저 보여주고, 최소 한 번 클릭을 소모한 뒤 종료
+    private bool _pendingEnd = false;        // 지금 노드가 END 상태인지
+    private bool _endNeedsConfirm = false;   // END 진입 후 첫 클릭을 반드시 소비
+
     [Header("References")]
     public DialogueUI dialogueUI;
 
@@ -22,7 +26,7 @@ public class DialogueManager : MonoBehaviour
     {
         if (!dialogueUI) { Debug.LogError("[DialogueManager] dialogueUI 연결 필요"); enabled = false; return; }
 
-        // 파일명: 네가 쓰는 이름으로 고정
+        // 파일명은 네가 쓰는 이름으로 고정
         dialogueNodes = CSVLoader.LoadTable<DialogueNode>("Ch1_MainDialogue", "NodeId");
         storyLines = CSVLoader.LoadTable<StoryLine>("Ch1_MainStory_kr", "NodeId");
         speakers = CSVLoader.LoadTable<Speaker>("Speakers_kr", "SpeakerId");
@@ -33,15 +37,6 @@ public class DialogueManager : MonoBehaviour
         dialogueUI.onClickNext = Next;
         dialogueUI.onChoiceSelected = OnChoiceSelected;
 
-        // (옵션) 수치 팝업 이벤트 — EffectRunner에 이미 포함되어 있지 않다면 주석 처리 가능
-        if (EffectRunner.OnStatApplied != null)
-        {
-            EffectRunner.OnStatApplied += (targetId, statKey, delta) =>
-            {
-                dialogueUI?.ShowStatPopup(targetId, statKey, delta);
-            };
-        }
-
         currentNodeId = string.IsNullOrEmpty(startNodeId) ? FindFirstNodeId() : startNodeId;
         if (string.IsNullOrEmpty(currentNodeId)) { Debug.LogError("[DialogueManager] 시작 노드 없음"); enabled = false; return; }
 
@@ -50,12 +45,14 @@ public class DialogueManager : MonoBehaviour
 
     private string FindFirstNodeId()
     {
-        foreach (var kv in dialogueNodes) // 스토리 대신 노드 테이블 기준으로도 안전
+        // Dialogue로 시작하는 첫 노드 우선
+        foreach (var kv in dialogueNodes)
         {
             var node = kv.Value;
             if (string.IsNullOrEmpty(node.NodeType) || node.NodeType == "Dialogue")
                 return kv.Key;
         }
+        // 없으면 아무거나
         foreach (var kv in storyLines) return kv.Key;
         return null;
     }
@@ -63,34 +60,36 @@ public class DialogueManager : MonoBehaviour
     /// 현재 노드의 대사/선택지만 보여준다. (입장 이펙트 실행 X)
     private void ShowCurrentNode()
     {
-        // END 안전 처리
-        if (dialogueNodes.TryGetValue(currentNodeId, out var node)
-            && !string.IsNullOrEmpty(node.NodeType) && node.NodeType.Equals("END"))
-        {
-            Debug.Log("스토리 종료(END) → 맵 이동");
-            return;
-        }
-
-        // 스토리 라인 없어도 깨지지 않게 TryGet
+        dialogueNodes.TryGetValue(currentNodeId, out var node);
         storyLines.TryGetValue(currentNodeId, out var line);
 
-        // 대사 출력 (없으면 system/빈 문자열로 안전 표시)
+        // END 여부
+        _pendingEnd = (node != null && !string.IsNullOrEmpty(node.NodeType) && node.NodeType.Equals("END"));
+
+        // 대사 출력(스토리 라인 없어도 안전)
         var spkId = line?.SpeakerId ?? "system";
         var spk = speakers.ContainsKey(spkId) ? speakers[spkId] : new Speaker { Name = spkId };
         string text = line?.Text ?? "";
         string processed = (node != null) ? DialogueTextEffect.Apply(text, node.TextEffect) : text;
         dialogueUI.ShowDialogue(spk.Name, processed);
 
-        // ChoiceGroup 묶음 수집 → 버튼 생성 (현재 노드가 Choice일 때만)
+        // END면 선택지 없이 표시만 하고, 다음 클릭 한 번은 반드시 소비
+        if (_pendingEnd)
+        {
+            _awaitingAdvance = false;
+            _queuedNextNodeId = null;
+            _endNeedsConfirm = true;   // ★ 이 플래그가 한 번의 클릭을 먹는다
+            return;
+        }
+
+        // ChoiceGroup 묶음 → 버튼 생성 (현재 노드가 Choice일 때만)
         var choiceIds = CollectChoiceGroupByDialogue(currentNodeId);
         if (choiceIds.Count > 0)
         {
             var items = new List<(string nodeId, string label, string style, string args, string flags)>();
             foreach (var cid in choiceIds)
             {
-                // 버튼 라벨은 스토리 라인이 없어도 cid로 대체
-                string label = storyLines.TryGetValue(cid, out var cLine) && !string.IsNullOrEmpty(cLine.ChoiceText)
-                               ? cLine.ChoiceText : cid;
+                string label = (storyLines.TryGetValue(cid, out var cLine) && !string.IsNullOrEmpty(cLine.ChoiceText)) ? cLine.ChoiceText : cid;
                 var n = dialogueNodes[cid];
                 items.Add((cid, label, n.ChoiceStyle, n.ChoiceArgs, n.ChoiceFlags));
             }
@@ -101,7 +100,6 @@ public class DialogueManager : MonoBehaviour
         _queuedNextNodeId = null;
     }
 
-    /// 같은 Day/Group의 Choice들을 모은다(현재 노드가 Choice일 때만)
     private List<string> CollectChoiceGroupByDialogue(string currentId)
     {
         var list = new List<string>();
@@ -179,6 +177,8 @@ public class DialogueManager : MonoBehaviour
 
         _queuedNextNodeId = next;
         _awaitingAdvance = true;
+        _pendingEnd = false; // 선택 후에는 END 대기 해제
+        _endNeedsConfirm = false;
     }
 
     public void Next()
@@ -193,7 +193,21 @@ public class DialogueManager : MonoBehaviour
             return;
         }
 
-        // (2) 선택 에코 대기 → 큐로 이동
+        // (2) END 표시 중이면: 첫 클릭은 반드시 소비, 두 번째 클릭에서 종료
+        if (_pendingEnd)
+        {
+            if (_endNeedsConfirm)
+            {
+                _endNeedsConfirm = false; // 첫 클릭 소비
+                return;
+            }
+            Debug.Log("스토리 종료(END) → 맵 이동");
+            // 여기서 실제 맵 이동 함수를 호출하면 됨.
+            _pendingEnd = false;
+            return;
+        }
+
+        // (3) 선택 에코 대기 → 큐로 이동
         if (_awaitingAdvance && !string.IsNullOrEmpty(_queuedNextNodeId))
         {
             currentNodeId = _queuedNextNodeId;
@@ -203,11 +217,10 @@ public class DialogueManager : MonoBehaviour
             return;
         }
 
-        // (3) Dialogue면 지금 클릭 시 체인 실행 → 점프 우선
+        // (4) Dialogue면 지금 클릭 시 체인 실행 → 점프 우선
         if (dialogueNodes.TryGetValue(currentNodeId, out var cur) &&
             (string.IsNullOrEmpty(cur.NodeType) || cur.NodeType.Equals("Dialogue")))
         {
-            // 스토리 라인이 없어도 진행되게 방어
             storyLines.TryGetValue(currentNodeId, out var line);
 
             string jump = EffectRunner.RunNodeChain(cur, line); // 클릭 시 실행
@@ -229,7 +242,7 @@ public class DialogueManager : MonoBehaviour
             return;
         }
 
-        // (4) 안전망
+        // (5) 안전망
         if (dialogueNodes.TryGetValue(currentNodeId, out var node) && !string.IsNullOrEmpty(node.NextNodeId))
         {
             currentNodeId = node.NextNodeId;
