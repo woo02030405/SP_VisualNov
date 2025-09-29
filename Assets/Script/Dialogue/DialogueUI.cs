@@ -4,6 +4,8 @@ using UnityEngine.UI;
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using UnityEngine.EventSystems;
+using Game.OverlayUI;
 
 public class DialogueUI : MonoBehaviour
 {
@@ -24,22 +26,36 @@ public class DialogueUI : MonoBehaviour
 
     // 외부(Manager)와 연결되는 이벤트들
     public Action onClickNext;
-    public Action<string> ShowChoiceHint; // 선택 실패/안내 메시지
     public Action<GameObject, string, string> onChoiceSelected; // (버튼GO, nodeId, label)
 
-    // (선택) 캐릭터 옆 팝업을 쓰고 싶으면 프리팹/레이어를 연결해 두세요.
     [Header("Hints (Optional)")]
     public RectTransform hintLayer;
     public FloatingHint hintPrefab;
 
     private void Update()
     {
-        // 클릭/엔터 → 현재 선택지가 없을 때만 진행
-        if ((Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter) || Input.GetMouseButtonDown(0))
-            && !HasChoices())
+        // 모달/메뉴가 열려 있으면 입력 막기
+        if (UIBlocker.IsBlocked) return;
+
+        // 마우스가 UI 위면 클릭을 진행 입력으로 취급하지 않음
+        if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject())
+            return;
+
+        // 터치 환경 방어
+        if (Input.touchCount > 0)
         {
-            onClickNext?.Invoke();
+            var t = Input.GetTouch(0);
+            if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject(t.fingerId))
+                return;
         }
+
+        bool clicked = Input.GetKeyDown(KeyCode.Return)
+                    || Input.GetKeyDown(KeyCode.KeypadEnter)
+                    || Input.GetMouseButtonDown(0);
+
+        // 선택지가 열려 있을 땐 대사 진행 안 함(선택 버튼에서 처리)
+        if (clicked && !HasChoices())
+            onClickNext?.Invoke();
     }
 
     // ===== 타이핑 제어 =====
@@ -59,7 +75,6 @@ public class DialogueUI : MonoBehaviour
         _fullText = text ?? "";
         if (dialogueText) dialogueText.text = "";
 
-        // 단순 타이핑(리치텍스트 처리는 필요시 확장)
         float secPerChar = charactersPerSecond > 0 ? 1f / charactersPerSecond : 0f;
         for (int i = 0; i < _fullText.Length; i++)
         {
@@ -103,7 +118,7 @@ public class DialogueUI : MonoBehaviour
             if (!binder) binder = go.AddComponent<ChoiceButtonBinder>();
             binder.Init(this, c.nodeId, c.label, c.style, c.args, c.flags);
 
-            // (옵션) 실패 연출 컴포넌트 보장
+            // 실패 연출 컴포넌트 보장(없으면 추가)
             if (!go.GetComponent<FailureFX>()) go.AddComponent<FailureFX>();
         }
     }
@@ -122,11 +137,10 @@ public class DialogueUI : MonoBehaviour
         onChoiceSelected?.Invoke(go, nodeId, label);
     }
 
-    // ===== (옵션) 간단 힌트 — 지금은 레이어/프리팹 없으면 Debug만 =====
+    // ===== (옵션) 간단 힌트 — 프리팹/레이어 없으면 Debug만 =====
     public void ShowFloatingHintAtSpeaker(string speakerId, string message)
     {
-        if (string.IsNullOrEmpty(message))
-            return;
+        if (string.IsNullOrEmpty(message)) return;
 
         if (hintLayer != null && hintPrefab != null)
         {
