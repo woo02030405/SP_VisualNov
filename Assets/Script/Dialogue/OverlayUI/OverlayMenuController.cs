@@ -79,7 +79,7 @@ namespace Game.OverlayUI
                 return;
             }
 
-            if (panel == null) return; // MissingReference 방어
+            Debug.Log($"[OverlayMenuController] Toggle({on}), panel.activeSelf={panel.activeSelf}");
 
             panel.SetActive(on);
             Time.timeScale = on ? 0f : 1f;
@@ -89,6 +89,7 @@ namespace Game.OverlayUI
 
             Debug.Log($"[Menu] {(on ? "OPEN" : "CLOSE")}");
         }
+
 
         void OnDisable()
         {
@@ -141,7 +142,10 @@ namespace Game.OverlayUI
             }
 
             var parent = dialogLayer ? dialogLayer : transform.parent;
-            var d = Instantiate(confirmPrefab, parent);
+            var d = Instantiate(confirmPrefab);
+            d.transform.SetParent(parent, false); // worldPositionStays = false → RectTransform 유지
+
+            d.gameObject.SetActive(true);
             d.Setup(msg, ok, cancel);
             return d;
         }

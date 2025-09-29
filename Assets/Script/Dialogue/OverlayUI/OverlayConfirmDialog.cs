@@ -30,12 +30,17 @@ namespace Game.OverlayUI
 
         void OnEnable()
         {
-            // 등장 애니메이션
-            if (cg) cg.DOFade(1f, 0.15f);
-            if (panel) panel.DOScale(1f, 0.2f).SetEase(Ease.OutBack);
-            // 모달 차단 (메뉴와 중첩돼도 스택으로 안전)
+            // 진입 애니메이션 재생
+            if (cg) { cg.alpha = 0f; cg.DOFade(1f, 0.15f).SetUpdate(true); }
+            if (panel)
+            {
+                panel.localScale = Vector3.one * 0.9f;
+                panel.DOScale(1f, 0.2f).SetEase(Ease.OutBack).SetUpdate(true);
+            }
             UIBlocker.Push();
         }
+
+
 
         public void Setup(string msg, string okText = "확인", string cancelText = null)
         {
@@ -66,14 +71,13 @@ namespace Game.OverlayUI
         public void Close()
         {
             // 퇴장 애니메이션 후 삭제
-            if (cg) cg.DOFade(0f, 0.12f);
-            if (panel) panel.DOScale(0.9f, 0.12f).SetEase(Ease.InSine);
+            if (cg) cg.DOFade(0f, 0.12f).SetUpdate(true);
+            if (panel) panel.DOScale(0.9f, 0.12f).SetEase(Ease.InSine).SetUpdate(true);
             Destroy(gameObject, 0.13f);
         }
 
         void OnDestroy()
         {
-            // 모달 차단 해제
             UIBlocker.Pop();
         }
     }
