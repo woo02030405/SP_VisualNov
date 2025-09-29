@@ -2,6 +2,7 @@ using UnityEngine;
 using TMPro;
 using UnityEngine.UI;
 using System;
+using System.Collections;
 using System.Collections.Generic;
 
 public class DialogueUI : MonoBehaviour
@@ -10,20 +11,30 @@ public class DialogueUI : MonoBehaviour
     public TMP_Text speakerNameText;
     public TMP_Text dialogueText;
 
+    [Header("Typing")]
+    public float charactersPerSecond = 35f;   // 타이핑 속도
+    private Coroutine typingCo;
+    private string _fullText;
+    private bool _isTyping;
+
     [Header("Choices")]
     public GameObject choiceButtonPrefab;
     public Transform choiceContainer;
-
     private readonly List<GameObject> spawnedChoices = new List<GameObject>();
 
     // 외부(Manager)와 연결되는 이벤트들
     public Action onClickNext;
-    public Action<string> ShowChoiceHint; // 선택: 실패/안내 메시지
+    public Action<string> ShowChoiceHint; // 선택 실패/안내 메시지
     public Action<GameObject, string, string> onChoiceSelected; // (버튼GO, nodeId, label)
+
+    // (선택) 캐릭터 옆 팝업을 쓰고 싶으면 프리팹/레이어를 연결해 두세요.
+    [Header("Hints (Optional)")]
+    public RectTransform hintLayer;
+    public FloatingHint hintPrefab;
 
     private void Update()
     {
-        // Enter 또는 좌클릭 → 선택지가 없을 때만 다음 진행
+        // 클릭/엔터 → 현재 선택지가 없을 때만 진행
         if ((Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter) || Input.GetMouseButtonDown(0))
             && !HasChoices())
         {
@@ -31,14 +42,48 @@ public class DialogueUI : MonoBehaviour
         }
     }
 
-    public void ShowDialogue(string speakerName, string text)
+    // ===== 타이핑 제어 =====
+    public bool IsTyping() => _isTyping;
+
+    public void CompleteTyping()
     {
-        if (speakerNameText) speakerNameText.text = speakerName;
-        if (dialogueText) dialogueText.text = text;
-        ClearChoices();
+        if (!_isTyping) return;
+        _isTyping = false;
+        if (typingCo != null) StopCoroutine(typingCo);
+        if (dialogueText != null) dialogueText.text = _fullText;
     }
 
-    // 새 시그니처: style/args/flags까지 함께 전달받음
+    private IEnumerator TypeRoutine(string text)
+    {
+        _isTyping = true;
+        _fullText = text ?? "";
+        if (dialogueText) dialogueText.text = "";
+
+        // 단순 타이핑(리치텍스트 처리는 필요시 확장)
+        float secPerChar = charactersPerSecond > 0 ? 1f / charactersPerSecond : 0f;
+        for (int i = 0; i < _fullText.Length; i++)
+        {
+            if (!_isTyping) break;
+            dialogueText.text = _fullText.Substring(0, i + 1);
+            if (secPerChar > 0) yield return new WaitForSeconds(secPerChar);
+            else yield return null;
+        }
+
+        _isTyping = false;
+        typingCo = null;
+    }
+
+    // ===== 표시 =====
+    public void ShowDialogue(string speakerName, string text)
+    {
+        if (speakerNameText) speakerNameText.text = speakerName ?? "";
+        if (typingCo != null) { StopCoroutine(typingCo); typingCo = null; }
+        if (dialogueText) dialogueText.text = "";
+        ClearChoices();
+
+        typingCo = StartCoroutine(TypeRoutine(text ?? ""));
+    }
+
     public void ShowChoices(List<(string nodeId, string label, string style, string args, string flags)> choices)
     {
         ClearChoices();
@@ -56,10 +101,9 @@ public class DialogueUI : MonoBehaviour
 
             var binder = go.GetComponent<ChoiceButtonBinder>();
             if (!binder) binder = go.AddComponent<ChoiceButtonBinder>();
-
             binder.Init(this, c.nodeId, c.label, c.style, c.args, c.flags);
 
-            // 실패 연출용 컴포넌트가 프리팹에 없다면 붙여둠(있어도 문제 없음)
+            // (옵션) 실패 연출 컴포넌트 보장
             if (!go.GetComponent<FailureFX>()) go.AddComponent<FailureFX>();
         }
     }
@@ -76,5 +120,32 @@ public class DialogueUI : MonoBehaviour
     public void RaiseChoiceSelected(GameObject go, string nodeId, string label)
     {
         onChoiceSelected?.Invoke(go, nodeId, label);
+    }
+
+    // ===== (옵션) 간단 힌트 — 지금은 레이어/프리팹 없으면 Debug만 =====
+    public void ShowFloatingHintAtSpeaker(string speakerId, string message)
+    {
+        if (string.IsNullOrEmpty(message))
+            return;
+
+        if (hintLayer != null && hintPrefab != null)
+        {
+            var inst = Instantiate(hintPrefab, hintLayer);
+            inst.Play(message);
+        }
+        else
+        {
+            Debug.Log($"[Hint] {speakerId}: {message}");
+        }
+    }
+
+    public void ShowStatPopup(string targetSpeakerId, string statKey, int delta)
+    {
+        string emoji = statKey.StartsWith("affinity") ? "♡"
+                    : statKey.StartsWith("gold") ? "ⓖ"
+                    : statKey.StartsWith("item") ? "🎁"
+                    : statKey.StartsWith("relation") ? "⚡" : "+";
+        string msg = $"{emoji}{(delta >= 0 ? "+" : "")}{delta}";
+        ShowFloatingHintAtSpeaker(targetSpeakerId, msg);
     }
 }

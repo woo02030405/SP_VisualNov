@@ -17,14 +17,14 @@ CH1,1,S1_N015,Dialogue,,S1_N016,,,,,,,,,,,,False,
 CH1,1,S1_N016,Choice,Choice_003,S1_N019,,,affinity:YUNA+20;,,,,,,default,,,False,True
 CH1,1,S1_N017,Choice,Choice_003,S1_N020,,,affinity:MINJI+10;lock:JIHOO,,,,,,default,,,False,True
 CH1,1,S1_N018,Choice,Choice_003,S1_N021,,,affinity:JIHOO+1,,,,,,default,,,False,True
-CH1,1,S1_N019,Dialogue,,S1_N023,,,,,,,,,,,,False,
-CH1,1,S1_N020,Dialogue,,S1_N023,,,,,,,,,,,,False,
+CH1,1,S1_N019,Dialogue,,S1_N022,,,,,,,,,,,,False,
+CH1,1,S1_N020,Dialogue,,S1_N022,,,,,,,,,,,,False,
 CH1,1,S1_N021,Dialogue,,S1_N022,,,,,,,,,,,,False,
 CH1,1,S1_N022,Dialogue,,S1_N023,,,,,,,,,,,,False,
 CH1,1,S1_N023,Choice,Choice_004,S1_N027,,affinity:YUNA+10,,,,,,,default,,,False,True
 CH1,1,S1_N024,Choice,Choice_004,S1_N027,,affinity:MINJI+10,,,,,,,default,,,False,True
 CH1,1,S1_N025,Choice,Choice_004,S1_N027,,affinity:JIHOO+1,,,,,,,default,,,False,True
-CH1,1,S1_N026,Choice,Choice_004,S1_N028,,,rand(70)?jump:N005;!rand(70)?jump:N004,,,,,,default,,,False,True
+CH1,1,S1_N026,Choice,Choice_004,S1_N028,,,rand(70)?jump:S1_N005;!rand(70)?jump:S1_N004,,,,,,default,,,False,True
 CH1,1,S1_N027,Dialogue,,S1_N033,,,,,,,,,,,,False,
 CH1,1,S1_N028,Choice,Choice_005,S1_N032,,affinity:YUNA>=20,,,,affinity:YUNA+1;gold:-200,,,default,,,False,True
 CH1,1,S1_N029,Choice,Choice_005,S1_N033,,affinity:MINJI>=20,,,,affinity:MINJI+10;item:Camera+1,,,default,,,False,True

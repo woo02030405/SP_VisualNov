@@ -4,6 +4,10 @@ using UnityEngine;
 
 public static class EffectRunner
 {
+    // 수치 변동 발생 시 UI 등에 통지하고 싶을 때 쓰는 이벤트 (옵션)
+    // targetId: 보통 캐릭터ID(예: YUNA), statKey: "affinity:YUNA"/"gold"/"item:Ticket" 등, delta: +/-
+    public static Action<string, string, int> OnStatApplied;
+
     /// <summary>
     /// 한 줄 효과를 실행한다. jump 대상이 있으면 그 NodeId를 반환.
     /// </summary>
@@ -29,6 +33,16 @@ public static class EffectRunner
                 var key = add.Groups["key"].Value;
                 int delta = int.Parse(add.Groups["num"].Value);
                 GameState.I.AddVar(scope, key, delta);
+
+                string statKey = scope.ToLower() switch
+                {
+                    "affinity" => $"affinity:{key}",
+                    "item" => $"item:{key}",
+                    "gold" => "gold",
+                    "stamina" => "stamina",
+                    _ => scope
+                };
+                OnStatApplied?.Invoke(string.IsNullOrEmpty(key) ? null : key, statKey, delta);
                 continue;
             }
 
@@ -51,10 +65,11 @@ public static class EffectRunner
                 string B = rel.Groups["B"].Value.Trim();
                 int delta = int.Parse(rel.Groups["num"].Value);
                 GameState.I.AddRelation(A, B, delta);
+                OnStatApplied?.Invoke(A, "relation", delta);
                 continue;
             }
 
-            // 잠금 계열 → 플래그로
+            // 잠금 → 플래그로 저장
             if (s.StartsWith("lock:", StringComparison.OrdinalIgnoreCase))
             {
                 GameState.I.SetFlag($"lock:{s.Substring("lock:".Length).Trim()}");
@@ -88,11 +103,10 @@ public static class EffectRunner
                 continue;
             }
 
-            // 메시지 트리거(툴팁/경고 UI와 연동용)
+            // 메시지 트리거(툴팁/경고 UI와 연동용) — 여기서는 실제 표시 X
             if (s.StartsWith("show_message:", StringComparison.OrdinalIgnoreCase) ||
                 s.StartsWith("message:", StringComparison.OrdinalIgnoreCase))
             {
-                // 훅만 남김
                 continue;
             }
 
@@ -102,10 +116,7 @@ public static class EffectRunner
         return jumpTarget;
     }
 
-    /// <summary>
-    /// 하나의 DialogueNode에 대해 Conditions→ElseIf→Else 체인을 실행하고 jump를 반환.
-    /// (대화 진입 시 자동 실행에 사용)
-    /// </summary>
+    /// <summary> 노드 체인(Conditions→ElseIf→Else)을 실행하고 jump를 반환. </summary>
     public static string RunNodeChain(DialogueNode node, StoryLine line)
     {
         if (node == null) return null;
@@ -119,9 +130,7 @@ public static class EffectRunner
         return Apply(node.ElseEffects, line);
     }
 
-    /// <summary>
-    /// 스킵 페널티 전용 (원할 때 외부에서 호출)
-    /// </summary>
+    /// <summary> 스킵 페널티 전용 </summary>
     public static void ApplySkipPenalty(DialogueNode node, StoryLine line)
     {
         if (node == null) return;
