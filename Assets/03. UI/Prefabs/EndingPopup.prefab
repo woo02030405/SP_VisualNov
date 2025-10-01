@@ -269,7 +269,7 @@ GameObject:
   - component: {fileID: 1163306381285041869}
   - component: {fileID: 7475114473759463841}
   m_Layer: 5
-  m_Name: 'EndingPopup '
+  m_Name: EndingPopup
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0

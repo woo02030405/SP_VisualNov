@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
 namespace Game.OverlayUI
@@ -101,18 +102,30 @@ namespace Game.OverlayUI
             var dlg = Spawn("타이틀로 돌아갈까요?\n저장되지 않은 진행은 사라집니다.", "예", "아니오");
             if (!dlg) return;
 
-            // 메뉴를 닫지 않는다 (요구사항)
             dlg.onOk = () =>
             {
                 Time.timeScale = 1f;
                 Debug.Log("[Menu] 타이틀로 이동");
-                // Scene 이동 로직을 여기에…
+
+                // SceneNavigator를 찾아서 MainMenuScene 로드
+                var navigator = FindObjectOfType<SceneNavigator>();
+                if (navigator != null)
+                {
+                    navigator.Load("MainMenuScene", SceneManager.GetActiveScene().name);
+                }
+                else
+                {
+                    Debug.LogError("SceneNavigator가 씬에 없습니다. MainMenuScene으로 바로 이동합니다.");
+                    SceneManager.LoadScene("MainMenuScene", LoadSceneMode.Single);
+                }
             };
+
             dlg.onCancel = () =>
             {
                 // 아무 것도 하지 않음 — 메뉴 유지
             };
         }
+
 
         void ConfirmQuit()
         {

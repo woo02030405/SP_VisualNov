@@ -5,13 +5,13 @@ namespace Game.OverlayUI
 {
     public class LogEntryUI : MonoBehaviour
     {
-        [SerializeField] private TMP_Text speakerText;
-        [SerializeField] private TMP_Text lineText;
+        public TMP_Text speakerText;
+        public TMP_Text lineText;
 
         public void Setup(string speaker, string line)
         {
-            if (speakerText) speakerText.text = speaker;
-            if (lineText) lineText.text = line;
+            if (speakerText) speakerText.text = speaker ?? string.Empty;
+            if (lineText) lineText.text = line ?? string.Empty;
         }
     }
 }
