@@ -66,6 +66,8 @@ public class DialogueManager : MonoBehaviour
         var spk = speakers.ContainsKey(spkId) ? speakers[spkId] : new Speaker { Name = spkId };
         string text = line?.Text ?? "";
         string processed = (node != null) ? DialogueTextEffect.Apply(text, node.TextEffect) : text;
+
+        // 👉 대사 출력
         dialogueUI.ShowDialogue(spk.Name, processed);
 
         if (_pendingEnd)
@@ -73,9 +75,15 @@ public class DialogueManager : MonoBehaviour
             _awaitingAdvance = false;
             _queuedNextNodeId = null;
             _endNeedsConfirm = true;
+
+            // 🔹 END일 때는 일반 인디케이터 모드로
+            if (dialogueUI.nextIndicator != null)
+                dialogueUI.nextIndicator.SetMode(false);
+
             return;
         }
 
+        // 👉 선택지 수집
         var choiceIds = CollectChoiceGroupByDialogue(currentNodeId);
         if (choiceIds.Count > 0)
         {
@@ -91,6 +99,13 @@ public class DialogueManager : MonoBehaviour
 
         _awaitingAdvance = false;
         _queuedNextNodeId = null;
+
+        // ===== NextIndicator 모드 업데이트 =====
+        if (dialogueUI.nextIndicator != null)
+        {
+            bool hasChoices = (choiceIds.Count > 0);
+            dialogueUI.nextIndicator.SetMode(hasChoices);
+        }
     }
 
     private IEnumerator WaitAndShowChoices(List<(string nodeId, string label, string style, string args, string flags)> items)
@@ -98,6 +113,9 @@ public class DialogueManager : MonoBehaviour
         while (dialogueUI.IsTyping())
             yield return null;
         dialogueUI.ShowChoices(items);
+        // 선택지가 나타날 때 인디케이터 모드 갱신
+        if (dialogueUI.nextIndicator != null)
+            dialogueUI.nextIndicator.SetMode(true);
     }
 
     private List<string> CollectChoiceGroupByDialogue(string currentId)
