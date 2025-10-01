@@ -3,17 +3,34 @@ using UnityEngine;
 
 public class NextBlink : MonoBehaviour
 {
-    [SerializeField] CanvasGroup cg; // NextIndicatorø° ∫Ÿ¿œ CanvasGroup
+    [SerializeField] CanvasGroup cg;
+    private Tween blinkTween;
 
-    void OnEnable()
+    [Header("Blink Settings")]
+    public float fadeDuration = 0.6f;   // ÍπúÎ∞ïÏù¥Îäî ÏÜçÎèÑ (InspectorÏóêÏÑú Ï°∞Ï†à)
+    public Ease blinkEase = Ease.InOutSine;
+
+    void Awake()
     {
         if (!cg) cg = GetComponent<CanvasGroup>() ?? gameObject.AddComponent<CanvasGroup>();
         cg.alpha = 0f;
-        cg.DOFade(1f, 0.6f).SetLoops(-1, LoopType.Yoyo).SetEase(Ease.InOutSine);
     }
 
-    void OnDisable()
+    public void StartBlink()
     {
-        DOTween.Kill(cg);
+        StopBlink();
+        blinkTween = cg.DOFade(1f, fadeDuration)
+            .SetLoops(-1, LoopType.Yoyo)
+            .SetEase(blinkEase);
+    }
+
+    public void StopBlink()
+    {
+        if (blinkTween != null && blinkTween.IsActive())
+        {
+            blinkTween.Kill();
+            blinkTween = null;
+        }
+        cg.alpha = 0f;
     }
 }
