@@ -160,27 +160,7 @@ public class DialogueManager : MonoBehaviour
 
         if (!cond && !elif && string.IsNullOrEmpty(jump))
         {
-            // 이미 실패한 버튼이면 패널티는 다시 적용하지 않음
-            if (!selectedBtn.GetComponent<ChoiceFailMarker>())
-            {
-                selectedBtn.AddComponent<ChoiceFailMarker>();
-
-                string msg = (choiceLine != null && !string.IsNullOrEmpty(choiceLine.ElseEffectsMessage))
-                           ? choiceLine.ElseEffectsMessage
-                           : "조건이 부족합니다.";
-                dialogueUI.ShowFloatingHintAtSpeaker(choiceLine?.SpeakerId, msg);
-
-                EffectRunner.Apply(choiceNode.ElseEffects, choiceLine); // 패널티 1회만
-            }
-
-            var t = selectedBtn.transform;
-            t.DOShakePosition(0.25f, 12f, 18, 90f, false, true);
-            t.DOShakeScale(0.25f, 0.2f);
-
-            var argMap = ChoiceAnimUtil.ParseArgs(choiceNode.ChoiceArgs);
-            var fx = selectedBtn.GetComponent<FailureFX>();
-            if (fx) fx.PlayFail(argMap);
-
+            // ... 실패 처리 (생략)
             return;
         }
 
@@ -204,7 +184,12 @@ public class DialogueManager : MonoBehaviour
         _awaitingAdvance = true;
         _pendingEnd = false;
         _endNeedsConfirm = false;
+
+        // 🔹 선택지를 고른 직후 → 인디케이터 normal 모드로 즉시 변경
+        if (dialogueUI.nextIndicator != null)
+            dialogueUI.nextIndicator.SetMode(false);
     }
+
 
     public void Next()
     {

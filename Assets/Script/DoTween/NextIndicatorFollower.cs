@@ -10,9 +10,6 @@ public class NextIndicatorFollower : MonoBehaviour
     public float offsetX = 20f;
     public float offsetY = 0f;
 
-    [Header("Size Control")]
-    public Vector2 indicatorSize = new Vector2(40f, 40f); // 기본 크기
-
     void LateUpdate()
     {
         if (!dialogueText || !indicator) return;
@@ -21,13 +18,16 @@ public class NextIndicatorFollower : MonoBehaviour
         var info = dialogueText.textInfo;
         if (info.characterCount == 0) return;
 
+        // 마지막 글자
         var lastChar = info.characterInfo[info.characterCount - 1];
         if (!lastChar.isVisible) return;
 
-        Vector3 worldPos = (lastChar.topRight + lastChar.bottomRight) / 2;
-        indicator.position = dialogueText.transform.TransformPoint(worldPos + new Vector3(offsetX, offsetY, 0));
+        // 중간 높이
+        float midY = (lastChar.ascender + lastChar.descender) / 2f;
 
-        // Inspector에서 설정한 크기로 적용
-        indicator.sizeDelta = indicatorSize;
+        Vector3 localPos = new Vector3(lastChar.topRight.x, midY, 0);
+        Vector3 worldPos = dialogueText.transform.TransformPoint(localPos);
+
+        indicator.position = worldPos + new Vector3(offsetX, offsetY, 0);
     }
 }
