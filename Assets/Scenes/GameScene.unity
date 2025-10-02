@@ -13530,6 +13530,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   startNodeId: S1_N001
   dialogueUI: {fileID: 762087512}
+  endingPopupPrefab: {fileID: 0}
+  uiLayer: {fileID: 0}
 --- !u!1 &892494937
 GameObject:
   m_ObjectHideFlags: 0
@@ -14949,7 +14951,7 @@ RectTransform:
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
   m_AnchoredPosition: {x: 0, y: 0}
-  m_SizeDelta: {x: 40, y: 40}
+  m_SizeDelta: {x: 25, y: 25}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1255892937
 MonoBehaviour:
@@ -15003,10 +15005,11 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   cg: {fileID: 1255892940}
   indicatorImage: {fileID: 1255892937}
-  fadeDuration: 0.75
-  blinkEase: 4
   normalSprite: {fileID: 21300000, guid: 312f7b9f00d76c048ae04345337ba4e5, type: 3}
   choiceSprite: {fileID: 21300000, guid: 84462b36ce011574fb162518715c0b95, type: 3}
+  endSprite: {fileID: 21300000, guid: 928f6bc57a0e91d41809a4119058a548, type: 3}
+  fadeDuration: 0.75
+  blinkEase: 4
 --- !u!225 &1255892940
 CanvasGroup:
   m_ObjectHideFlags: 0

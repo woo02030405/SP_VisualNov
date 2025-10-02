@@ -1,7 +1,7 @@
-using UnityEngine;
+using DG.Tweening;
 using System.Collections;
 using System.Collections.Generic;
-using DG.Tweening;
+using UnityEngine;
 
 public class DialogueManager : MonoBehaviour
 {
@@ -22,6 +22,10 @@ public class DialogueManager : MonoBehaviour
 
     [Header("References")]
     public DialogueUI dialogueUI;
+
+    [Header("Ending UI")]
+    [SerializeField] private EndingPopup endingPopupPrefab; // EndingPopup 프리팹
+    [SerializeField] private Transform uiLayer;             // RootCanvas 하위 DialogLayer 같은 부모
 
     private void Start()
     {
@@ -67,7 +71,6 @@ public class DialogueManager : MonoBehaviour
         string text = line?.Text ?? "";
         string processed = (node != null) ? DialogueTextEffect.Apply(text, node.TextEffect) : text;
 
-        // 👉 대사 출력
         dialogueUI.ShowDialogue(spk.Name, processed);
 
         if (_pendingEnd)
@@ -76,14 +79,20 @@ public class DialogueManager : MonoBehaviour
             _queuedNextNodeId = null;
             _endNeedsConfirm = true;
 
-            // 🔹 END일 때는 일반 인디케이터 모드로
+            // 🔹 END 노드 → 엔딩 모드만 세팅
             if (dialogueUI.nextIndicator != null)
-                dialogueUI.nextIndicator.SetMode(false);
+                dialogueUI.nextIndicator.SetEnd();
+
+            // 🔹 EndingPopup 띄우기
+            if (endingPopupPrefab != null && uiLayer != null)
+            {
+                var popup = Instantiate(endingPopupPrefab, uiLayer);
+                popup.Show("엔딩", "저장되지 않은 진행은 사라집니다.");
+            }
 
             return;
         }
 
-        // 👉 선택지 수집
         var choiceIds = CollectChoiceGroupByDialogue(currentNodeId);
         if (choiceIds.Count > 0)
         {
@@ -95,27 +104,36 @@ public class DialogueManager : MonoBehaviour
                 items.Add((cid, label, n.ChoiceStyle, n.ChoiceArgs, n.ChoiceFlags));
             }
             StartCoroutine(WaitAndShowChoices(items));
+
+            // 🔹 선택지 → choice 모드만 세팅
+            if (dialogueUI.nextIndicator != null)
+                dialogueUI.nextIndicator.SetChoice();
+        }
+        else
+        {
+            // 🔹 일반 대사 → normal 모드만 세팅
+            if (dialogueUI.nextIndicator != null)
+                dialogueUI.nextIndicator.SetNormal();
         }
 
         _awaitingAdvance = false;
         _queuedNextNodeId = null;
-
-        // ===== NextIndicator 모드 업데이트 =====
-        if (dialogueUI.nextIndicator != null)
-        {
-            bool hasChoices = (choiceIds.Count > 0);
-            dialogueUI.nextIndicator.SetMode(hasChoices);
-        }
     }
+
 
     private IEnumerator WaitAndShowChoices(List<(string nodeId, string label, string style, string args, string flags)> items)
     {
         while (dialogueUI.IsTyping())
             yield return null;
+
         dialogueUI.ShowChoices(items);
-        // 선택지가 나타날 때 인디케이터 모드 갱신
+
+        // 🔹 선택지 나타날 때 인디케이터 모드
         if (dialogueUI.nextIndicator != null)
-            dialogueUI.nextIndicator.SetMode(true);
+        {
+            dialogueUI.nextIndicator.SetChoice();
+            dialogueUI.nextIndicator.StartBlink();
+        }
     }
 
     private List<string> CollectChoiceGroupByDialogue(string currentId)
@@ -160,7 +178,7 @@ public class DialogueManager : MonoBehaviour
 
         if (!cond && !elif && string.IsNullOrEmpty(jump))
         {
-            // ... 실패 처리 (생략)
+            // 실패 처리 (생략)
             return;
         }
 
@@ -185,11 +203,13 @@ public class DialogueManager : MonoBehaviour
         _pendingEnd = false;
         _endNeedsConfirm = false;
 
-        // 🔹 선택지를 고른 직후 → 인디케이터 normal 모드로 즉시 변경
+        // 🔹 선택지 고른 직후 normal 모드
         if (dialogueUI.nextIndicator != null)
-            dialogueUI.nextIndicator.SetMode(false);
+        {
+            dialogueUI.nextIndicator.SetNormal();
+            dialogueUI.nextIndicator.StartBlink();
+        }
     }
-
 
     public void Next()
     {

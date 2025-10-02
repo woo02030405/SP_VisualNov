@@ -87,9 +87,12 @@ public class DialogueUI : MonoBehaviour
         _isTyping = false;
         typingCo = null;
 
-        // 출력 끝 → 인디케이터 켜기
-        if (nextIndicator) nextIndicator.StartBlink();
+        if (nextIndicator != null)
+        {
+            nextIndicator.StartBlink();
+        }
     }
+
 
     // ===== 표시 =====
     public void ShowDialogue(string speakerName, string text)

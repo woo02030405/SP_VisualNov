@@ -4,15 +4,18 @@ using UnityEngine.UI;
 
 public class NextBlink : MonoBehaviour
 {
-    [SerializeField] CanvasGroup cg;
-    [SerializeField] Image indicatorImage;   // 🔹 깜빡일 이미지
+    [SerializeField] private CanvasGroup cg;
+    [SerializeField] private Image indicatorImage;   
     private Tween blinkTween;
 
+    [Header("Sprites")]
+    [SerializeField] private Sprite normalSprite;
+    [SerializeField] private Sprite choiceSprite;
+    [SerializeField] private Sprite endSprite;   
+
     [Header("Blink Settings")]
-    public float fadeDuration = 0.6f;
-    public Ease blinkEase = Ease.InOutSine;
-    public Sprite normalSprite;
-    public Sprite choiceSprite;
+    [SerializeField] private float fadeDuration = 0.6f;
+    [SerializeField] private Ease blinkEase = Ease.InOutSine;
 
     void Awake()
     {
@@ -21,12 +24,23 @@ public class NextBlink : MonoBehaviour
         cg.alpha = 0f;
     }
 
-    public void SetMode(bool isChoice)
+    // ===== 모드 전환 =====
+    public void SetNormal()
     {
-        if (!indicatorImage) return;
-        indicatorImage.sprite = isChoice ? choiceSprite : normalSprite;
+        if (indicatorImage) indicatorImage.sprite = normalSprite;
     }
 
+    public void SetChoice()
+    {
+        if (indicatorImage) indicatorImage.sprite = choiceSprite;
+    }
+
+    public void SetEnd()
+    {
+        if (indicatorImage) indicatorImage.sprite = endSprite;
+    }
+
+    // ===== 애니메이션 =====
     public void StartBlink()
     {
         StopBlink();
