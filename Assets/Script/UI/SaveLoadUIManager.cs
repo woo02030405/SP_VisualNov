@@ -1,123 +1,126 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
-using System.Collections.Generic;
-using VN.SaveSystem; // SaveManager, SaveData 참조 
+using VN.SaveSystem;
 
+/// <summary>
+/// Save/Load 패널 전체 컨트롤러
+/// - OpenSave / OpenLoad / Close
+/// - 페이지 이동 / 슬롯 갱신 / 슬롯 클릭 처리
+/// </summary>
 public class SaveLoadUIManager : MonoBehaviour
 {
     [Header("Header")]
-    public TMP_Text titleText;   // SAVE / LOAD
-
-    [Header("NavigationBar")]
-    public Button prevButton;
+    public TMP_Text titleText;
     public TMP_Text pageLabel;
-    public Button nextButton;
 
-    [Header("Footer")]
-    public Button backButton;
-    public TMP_Text infoText;
+    [Header("Paging")]
+    public Button prevButton;
+    public Button nextButton;
+    public int slotsPerPage = 8;
 
     [Header("Slots")]
-    public Transform slotGrid;     // GridLayoutGroup
-    public GameObject slotPrefab;  // SlotPrefab
-    private List<SaveSlotUI> slotUIs = new List<SaveSlotUI>();
+    public List<SaveSlotUI> slots = new List<SaveSlotUI>();
 
+    [Header("Mode")]
+    public bool isSaveMode = true;
+
+    // 내부 상태
     private int currentPage = 0;
-    private const int slotsPerPage = 10;
+    private int totalPages = 1;
 
-    // Save/Load 모드 (true = Save, false = Load)
-    public bool isSaveMode = false;
-
-    void Start()
+    void Awake()
     {
-        // 페이지 버튼 이벤트
-        prevButton.onClick.AddListener(() =>
-        {
-            currentPage = Mathf.Max(0, currentPage - 1);
-            RefreshPage();
-        });
+        if (prevButton) prevButton.onClick.AddListener(OnClickPrevPage);
+        if (nextButton) nextButton.onClick.AddListener(OnClickNextPage);
+    }
 
-        nextButton.onClick.AddListener(() =>
-        {
-            currentPage = Mathf.Min(TotalPages - 1, currentPage + 1);
-            RefreshPage();
-        });
-
-        backButton.onClick.AddListener(() =>
-        {
-            var nav = FindObjectOfType<SceneNavigator>();
-            if (nav != null) nav.Back();
-        });
-
-        BuildSlots();
+    // ── 외부에서 호출 ───────────────────────────────────────────────────────────
+    public void OpenSave()
+    {
+        isSaveMode = true;
+        if (titleText) titleText.text = "SAVE";
+        gameObject.SetActive(true);
+        currentPage = 0;
         RefreshPage();
     }
 
-    private int TotalPages
+    public void OpenLoad()
     {
-        get
-        {
-            if (SaveManager.Instance == null) return 1;
-            int totalSlots = SaveManager.Instance.GetTotalSlotCount();
-            return Mathf.Max(1, Mathf.CeilToInt(totalSlots / (float)slotsPerPage));
-        }
+        isSaveMode = false;
+        if (titleText) titleText.text = "LOAD";
+        gameObject.SetActive(true);
+        currentPage = 0;
+        RefreshPage();
     }
 
-    private void BuildSlots()
+    public void Close()
     {
-        foreach (Transform child in slotGrid)
-        {
-            Destroy(child.gameObject);
-        }
-        slotUIs.Clear();
-
-        for (int i = 0; i < slotsPerPage; i++)
-        {
-            var slotObj = Instantiate(slotPrefab, slotGrid);
-            var ui = slotObj.GetComponent<SaveSlotUI>();
-            slotUIs.Add(ui);
-
-            ui.Init(i, isSaveMode, OnClickSlot);
-        }
+        gameObject.SetActive(false);
     }
 
-    private void RefreshPage()
+    // ── 페이지 갱신 ────────────────────────────────────────────────────────────
+    public void RefreshPage()
     {
-        // Header
-        titleText.text = isSaveMode ? "SAVE" : "LOAD";
+        int totalSlots = SaveManager.Instance.GetTotalSlotCount();
+        totalPages = Mathf.Max(1, Mathf.CeilToInt(totalSlots / (float)slotsPerPage));
+        currentPage = Mathf.Clamp(currentPage, 0, totalPages - 1);
 
-        // Footer
-        infoText.text = isSaveMode ? "게임 데이터를 저장합니다." : "게임 데이터를 불러옵니다.";
+        // 현재 페이지의 데이터 읽기
+        List<SaveData> pageData = SaveManager.Instance.GetSlotsForPage(currentPage, slotsPerPage);
 
-        // NavigationBar
-        pageLabel.text = $"{currentPage + 1} / {TotalPages}";
-
-        // 슬롯 채우기
-        var slots = SaveManager.Instance.GetSlotsForPage(currentPage, slotsPerPage);
-
-        for (int i = 0; i < slotsPerPage; i++)
+        // 슬롯 바인딩/표시
+        for (int i = 0; i < slots.Count; i++)
         {
-            var data = (i < slots.Count) ? slots[i] : null;
-            slotUIs[i].SetData(data, isNewest: (i == 0));
+            var slot = slots[i];
+            if (slot == null) continue;
+
+            // pageData가 부족하면 null 처리
+            SaveData data = (i < pageData.Count) ? pageData[i] : null;
+
+            // 최신 저장 배지 판단(간단히: 현재 페이지 첫 항목이면 newest)
+            bool isNewest = (currentPage == 0 && i == 0 && data != null);
+
+            // 기존 프로젝트가 Init(this, i, data, isNewest)를 기대하므로 그 시그니처로 세팅
+            slot.Init(this, i, data, isNewest);
         }
 
-        prevButton.interactable = currentPage > 0;
-        nextButton.interactable = currentPage < (TotalPages - 1);
+        // 페이지 라벨/버튼
+        if (pageLabel) pageLabel.text = $"{currentPage + 1} / {totalPages}";
+        if (prevButton) prevButton.interactable = (currentPage > 0);
+        if (nextButton) nextButton.interactable = (currentPage < totalPages - 1);
     }
 
-    private void OnClickSlot(int slotIndexInPage)
+    // ── 페이지 이동 ─────────────────────────────────────────────────────────────
+    private void OnClickPrevPage()
+    {
+        if (currentPage <= 0) return;
+        currentPage--;
+        RefreshPage();
+    }
+
+    private void OnClickNextPage()
+    {
+        if (currentPage >= totalPages - 1) return;
+        currentPage++;
+        RefreshPage();
+    }
+
+    // ── 슬롯 클릭 처리 (SaveSlotUI → 여기로 콜백) ───────────────────────────────
+    public void OnSlotClicked(int slotIndexInPage)
     {
         int realIndex = currentPage * slotsPerPage + slotIndexInPage;
 
         if (isSaveMode)
         {
             SaveManager.Instance.Save(realIndex);
-            RefreshPage();
+            RefreshPage();               // 저장 직후 목록 갱신
         }
         else
         {
             SaveManager.Instance.Load(realIndex);
+            Close();                     // 필요 없으면 이 줄 제거
         }
     }
 }

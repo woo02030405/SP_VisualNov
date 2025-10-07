@@ -1,102 +1,128 @@
 using System;
-using System.IO;
 using System.Collections.Generic;
+using System.IO;
 using UnityEngine;
 
 namespace VN.SaveSystem
 {
+    /// <summary>
+    /// JSON 기반 세이브/로드 매니저 (슬롯 페이지 UI 지원).
+    /// 파일: Application.persistentDataPath/save_slot_{n}.json
+    /// </summary>
     public class SaveManager : MonoBehaviour
     {
-        public static SaveManager Instance { get; private set; }
-
-        private string saveFilePath => Path.Combine(Application.persistentDataPath, "SaveData.json");
-        private string thumbnailFolder => Path.Combine(Application.persistentDataPath, "Thumbnails");
-
-        private List<SaveData> saveSlots = new List<SaveData>();
-        private const int MaxSlots = 50;
-
-        private void Awake()
+        // ── Singleton ────────────────────────────────────────────────────────────
+        private static SaveManager _instance;
+        public static SaveManager Instance
         {
-            if (Instance == null)
+            get
             {
-                Instance = this;
-                DontDestroyOnLoad(gameObject);
-                if (!Directory.Exists(thumbnailFolder))
-                    Directory.CreateDirectory(thumbnailFolder);
-                LoadAll();
+                if (_instance == null)
+                {
+                    var go = new GameObject("[SaveManager]");
+                    _instance = go.AddComponent<SaveManager>();
+                    DontDestroyOnLoad(go);
+                }
+                return _instance;
             }
-            else Destroy(gameObject);
         }
 
-        public int GetTotalSlotCount() => MaxSlots;
+        [Header("Slots")]
+        [SerializeField] private int totalSlots = 30;   // 전체 슬롯 수(페이지 계산용)
+        public int GetTotalSlotCount() => Mathf.Max(1, totalSlots);
 
-        public List<SaveData> GetSlotsForPage(int pageIndex, int slotsPerPage)
+        // 게임 상태 ↔ SaveData 매핑 콜백 (필요 시 외부에서 주입)
+        public Func<SaveData> OnBuildSaveData;
+        public Action<SaveData> OnApplySaveData;
+
+        // ── File helpers ─────────────────────────────────────────────────────────
+        private static string PathForSlot(int slot)
         {
-            int start = pageIndex * slotsPerPage;
-            int end = Mathf.Min(start + slotsPerPage, saveSlots.Count);
-            var result = new List<SaveData>();
-            for (int i = start; i < end; i++) result.Add(saveSlots[i]);
-            while (result.Count < slotsPerPage) result.Add(null);
-            return result;
+            string dir = Application.persistentDataPath;
+            return Path.Combine(dir, $"save_slot_{slot}.json");
         }
 
-        public void Save(int slotIndex)
+        public static bool HasSave(int slot) => File.Exists(PathForSlot(slot));
+
+        // ── UI 페이지 API ─────────────────────────────────────────────────────────
+        public List<SaveData> GetSlotsForPage(int page, int perPage)
         {
-            if (slotIndex < 0 || slotIndex >= MaxSlots) return;
-            var data = new SaveData
+            var list = new List<SaveData>();
+            int start = page * perPage;
+            for (int i = 0; i < perPage; i++)
             {
-                title = $"Chapter X / Node Y",
-                dateTime = DateTime.Now.ToString("yyyy/MM/dd HH:mm"),
-                thumbnailPath = CaptureThumbnail(slotIndex)
-            };
-            while (saveSlots.Count < MaxSlots) saveSlots.Add(null);
-            saveSlots[slotIndex] = data;
-            SaveAll();
-            Debug.Log($"Saved slot {slotIndex}");
-        }
+                int idx = start + i;
+                if (idx >= totalSlots) { list.Add(null); continue; }
 
-        public void Load(int slotIndex)
-        {
-            if (slotIndex < 0 || slotIndex >= saveSlots.Count) return;
-            var data = saveSlots[slotIndex];
-            if (data == null) { Debug.Log("�� �����Դϴ�."); return; }
-            Debug.Log($"Load slot {slotIndex} �� {data.title}");
-            // TODO: GameScene ���� ����
-        }
-
-        private void SaveAll()
-        {
-            string json = JsonUtility.ToJson(new SaveDatabase(saveSlots), true);
-            File.WriteAllText(saveFilePath, json);
-        }
-
-        private void LoadAll()
-        {
-            if (File.Exists(saveFilePath))
-            {
-                string json = File.ReadAllText(saveFilePath);
-                var db = JsonUtility.FromJson<SaveDatabase>(json);
-                saveSlots = db.slots ?? new List<SaveData>();
+                var path = PathForSlot(idx);
+                if (File.Exists(path))
+                {
+                    var json = File.ReadAllText(path);
+                    var data = JsonUtility.FromJson<SaveData>(json);
+                    list.Add(data);
+                }
+                else list.Add(null);
             }
-            else saveSlots = new List<SaveData>();
+            return list;
         }
 
-        private string CaptureThumbnail(int slotIndex)
+        // ── UI 호출용 Save/Load ───────────────────────────────────────────────────
+        public void Save(int slot)
         {
-            string fileName = $"slot_{slotIndex:D2}.png";
-            string path = Path.Combine(thumbnailFolder, fileName);
-            Texture2D tex = ScreenCapture.CaptureScreenshotAsTexture();
-            byte[] png = tex.EncodeToPNG();
-            File.WriteAllBytes(path, png);
-            Destroy(tex);
-            return path;
-        }
-    }
+            var data = OnBuildSaveData != null ? OnBuildSaveData() : new SaveData();
 
-    [System.Serializable]
-    public class SaveDatabase
-    {
-        public List<SaveData> slots;
-        public SaveDatabase(List<SaveData> slots) { this.slots = slots; }
+            data.system.saveSlot = slot;
+            data.system.timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+            data.dateTime = data.system.timestamp;
+
+            if (string.IsNullOrEmpty(data.title))
+                data.title = $"DAY{data.world.day:D2} - {data.world.timeSlot}";
+
+            var json = JsonUtility.ToJson(data, true);
+            File.WriteAllText(PathForSlot(slot), json);
+            Debug.Log($"[SaveManager] Saved slot {slot} → {PathForSlot(slot)}");
+        }
+
+        public void Load(int slot)
+        {
+            string path = PathForSlot(slot);
+            if (!File.Exists(path))
+            {
+                Debug.LogWarning($"[SaveManager] Save file not found: {path}");
+                return;
+            }
+            string json = File.ReadAllText(path);
+            var data = JsonUtility.FromJson<SaveData>(json);
+
+            OnApplySaveData?.Invoke(data);
+            Debug.Log($"[SaveManager] Loaded slot {slot}");
+        }
+
+        // ── 정적 호환 (원한다면 테스트 코드에서 사용) ─────────────────────────────
+        public static void Save(SaveData data, int slot)
+        {
+            if (data == null) { Debug.LogError("[SaveManager] SaveData is null"); return; }
+            data.system.saveSlot = slot;
+            data.system.timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+            data.dateTime = data.system.timestamp;
+
+            string json = JsonUtility.ToJson(data, true);
+            File.WriteAllText(PathForSlot(slot), json);
+            Debug.Log($"[SaveManager] Saved slot {slot} → {PathForSlot(slot)}");
+        }
+
+        public static SaveData LoadStatic(int slot)
+        {
+            string path = PathForSlot(slot);
+            if (!File.Exists(path))
+            {
+                Debug.LogWarning($"[SaveManager] Save file not found: {path}");
+                return null;
+            }
+            string json = File.ReadAllText(path);
+            var data = JsonUtility.FromJson<SaveData>(json);
+            Debug.Log($"[SaveManager] Loaded slot {slot}");
+            return data;
+        }
     }
 }
