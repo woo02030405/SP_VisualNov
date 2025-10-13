@@ -42,7 +42,7 @@ public class DialogueManager : MonoBehaviour
         if (!dialogueUI) { Debug.LogError("[DialogueManager] dialogueUI 연결 필요"); enabled = false; return; }
         if (!GameState.I) new GameObject("GameState", typeof(GameState)); // 전역 상태 보장
 
-        // ★ uiLayer 자동 할당(비워두면 대화 UI의 최상위 루트 사용)
+        // uiLayer 자동 할당(비워두면 대화 UI의 최상위 루트 사용)
         if (uiLayer == null) uiLayer = dialogueUI.transform.root;
 
         // CSV 로드 (모두 Resources 키)
@@ -84,9 +84,7 @@ public class DialogueManager : MonoBehaviour
         return null;
     }
 
-    // ─────────────────────────────────────────────
     // UI를 강제로 초기화(선택지/코루틴/타이핑/팝업 모두 정리)
-    // ─────────────────────────────────────────────
     private void ResetUIHard()
     {
         // 선택지 코루틴 정지
@@ -105,7 +103,7 @@ public class DialogueManager : MonoBehaviour
                 dialogueUI.ClearChoices();
         }
 
-        // ★ EndingPopup 모두 제거(uiLayer 하위만)
+        // EndingPopup 모두 제거(uiLayer 하위만)
         CloseAllPopups();
 
         _awaitingAdvance = false;
@@ -126,7 +124,7 @@ public class DialogueManager : MonoBehaviour
     {
         if (string.IsNullOrEmpty(currentNodeId)) return;
 
-        // ★ 새 노드를 그리기 전에 UI를 항상 초기화
+        // 새 노드를 그리기 전에 UI를 항상 초기화
         ResetUIHard();
 
         dialogueNodes.TryGetValue(currentNodeId, out var node);
@@ -218,6 +216,15 @@ public class DialogueManager : MonoBehaviour
         return list;
     }
 
+    // 선택 즉시 이동(랜덤/조건 점프 등)
+    private void DirectAdvance(string nodeId)
+    {
+        if (string.IsNullOrEmpty(nodeId)) return;
+        ResetUIHard();
+        currentNodeId = nodeId;
+        ShowCurrentNode();
+    }
+
     private void OnChoiceSelected(GameObject btn, string choiceNodeId, string label)
     {
         if (!dialogueNodes.TryGetValue(choiceNodeId, out var n)) { Debug.LogWarning($"선택 노드 없음: {choiceNodeId}"); return; }
@@ -230,12 +237,12 @@ public class DialogueManager : MonoBehaviour
             if (ConditionEvaluator.Evaluate(n.ElseIfConditions, line))
             {
                 var j = EffectRunner.Apply(n.ElseIfEffects, line);
-                if (!string.IsNullOrEmpty(j)) { DirectAdvance(j); return; }   // ★ 즉시 점프
+                if (!string.IsNullOrEmpty(j)) { DirectAdvance(j); return; }
             }
             else
             {
                 var j = EffectRunner.Apply(n.ElseEffects, line);
-                if (!string.IsNullOrEmpty(j)) { DirectAdvance(j); return; }   // ★ 즉시 점프
+                if (!string.IsNullOrEmpty(j)) { DirectAdvance(j); return; }
                 Debug.Log("[DialogueManager] 선택 조건 불일치. 진행 취소.");
                 return;
             }
@@ -243,35 +250,18 @@ public class DialogueManager : MonoBehaviour
         else
         {
             var j = EffectRunner.Apply(n.Effects, line);
-            if (!string.IsNullOrEmpty(j)) { DirectAdvance(j); return; }       // ★ 즉시 점프
+            if (!string.IsNullOrEmpty(j)) { DirectAdvance(j); return; }
         }
 
-        // 2) 선택 에코 → 백로그 (원하면 유지)
+        // 2) 선택 에코 → 백로그
         var hero = ResolveSpeakerName("hero");
         dialogueUI.ShowDialogue(string.IsNullOrEmpty(hero) ? "주인공" : hero, label);
         RSBM_MarkRead(choiceNodeId);
         RSBM_AddBacklog(choiceNodeId, string.IsNullOrEmpty(hero) ? "주인공" : hero, label);
 
-        // 3) NextNodeId로 바로 이동 (대기 없음)
+        // 3) NextNodeId로 즉시 이동
         if (!string.IsNullOrEmpty(n.NextNodeId)) { DirectAdvance(n.NextNodeId); return; }
-
         Debug.LogWarning($"선택 노드 NextNodeId 없음: {choiceNodeId}");
-    }
-
-    //  대기 없이 바로 다음 노드로
-    private void DirectAdvance(string nodeId)
-    {
-        if (string.IsNullOrEmpty(nodeId)) return;
-        ResetUIHard();               // 선택지/팝업/타이핑 정리
-        currentNodeId = nodeId;
-        ShowCurrentNode();           // 즉시 렌더
-    }
-
-
-    private void QueueNext(string nodeId)
-    {
-        _queuedNextNode = nodeId;
-        _awaitingAdvance = true;
     }
 
     public void Next()
@@ -334,7 +324,7 @@ public class DialogueManager : MonoBehaviour
     {
         if (string.IsNullOrEmpty(resKey)) return;
 
-        // ★ CSV 재로딩 전 UI 정리(선택지/팝업 포함)
+        // CSV 재로딩 전 UI 정리(선택지/팝업 포함)
         ResetUIHard();
 
         var table = CSVLoader.LoadTable<StoryLine>(resKey, "NodeId");
@@ -350,7 +340,7 @@ public class DialogueManager : MonoBehaviour
         if (string.IsNullOrEmpty(nodeId) || dialogueNodes == null || !dialogueNodes.ContainsKey(nodeId))
         { Debug.LogWarning($"JumpToNode 실패: {nodeId}"); return false; }
 
-        // ★ 점프 전 UI 정리(선택지/팝업 포함)
+        // 점프 전 UI 정리(선택지/팝업 포함)
         ResetUIHard();
 
         currentNodeId = nodeId;

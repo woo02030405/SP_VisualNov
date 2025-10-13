@@ -78,6 +78,16 @@ namespace VN.SaveSystem
             if (string.IsNullOrEmpty(data.title))
                 data.title = $"DAY{data.world.day:D2} - {data.world.timeSlot}";
 
+            // ★ 백로그/읽음 정보 포함 (RSBM 존재 시)
+            try
+            {
+                ReadSkipBacklogManager.Instance?.ExportToSave(data.story);
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"[SaveManager] ExportToSave skipped: {ex.Message}");
+            }
+
             var json = JsonUtility.ToJson(data, true);
             File.WriteAllText(PathForSlot(slot), json);
             Debug.Log($"[SaveManager] Saved slot {slot} → {PathForSlot(slot)}");
@@ -94,6 +104,16 @@ namespace VN.SaveSystem
             string json = File.ReadAllText(path);
             var data = JsonUtility.FromJson<SaveData>(json);
 
+            // ★ 읽음/백로그 복원 (RSBM 존재 시)
+            try
+            {
+                ReadSkipBacklogManager.Instance?.ImportFromSave(data.story);
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"[SaveManager] ImportFromSave skipped: {ex.Message}");
+            }
+
             OnApplySaveData?.Invoke(data);
             Debug.Log($"[SaveManager] Loaded slot {slot}");
         }
@@ -105,6 +125,16 @@ namespace VN.SaveSystem
             data.system.saveSlot = slot;
             data.system.timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
             data.dateTime = data.system.timestamp;
+
+            // ★ 백로그/읽음 Export 추가
+            try
+            {
+                ReadSkipBacklogManager.Instance?.ExportToSave(data.story);
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"[SaveManager] Static ExportToSave skipped: {ex.Message}");
+            }
 
             string json = JsonUtility.ToJson(data, true);
             File.WriteAllText(PathForSlot(slot), json);
@@ -121,6 +151,17 @@ namespace VN.SaveSystem
             }
             string json = File.ReadAllText(path);
             var data = JsonUtility.FromJson<SaveData>(json);
+
+            // ★ Import 추가
+            try
+            {
+                ReadSkipBacklogManager.Instance?.ImportFromSave(data.story);
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"[SaveManager] Static ImportFromSave skipped: {ex.Message}");
+            }
+
             Debug.Log($"[SaveManager] Loaded slot {slot}");
             return data;
         }

@@ -37,6 +37,7 @@ public class QuickSaveLoadManager : MonoBehaviour
 
     void Awake() => InitOnce();
 
+
     void InitOnce()
     {
         if (_inited) return;
@@ -58,6 +59,11 @@ public class QuickSaveLoadManager : MonoBehaviour
             SaveManager.Instance.OnBuildSaveData = BuildSaveData;
             SaveManager.Instance.OnApplySaveData = ApplySaveData;
         }
+
+        // RSBM 자동 생성 (없으면 새로 만든다)
+        if (ReadSkipBacklogManager.Instance == null)
+            new GameObject("ReadSkipBacklog", typeof(ReadSkipBacklogManager));
+
 
         _inited = true;
         Debug.Log("[QSLM] Init complete.");
