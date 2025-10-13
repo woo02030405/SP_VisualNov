@@ -284,7 +284,6 @@ GameObject:
   m_Component:
   - component: {fileID: 1691102465319023397}
   - component: {fileID: 7827033221857196182}
-  - component: {fileID: 561246525127408603}
   m_Layer: 5
   m_Name: LogEntry_Prefab
   m_TagString: Untagged
@@ -332,20 +331,6 @@ MonoBehaviour:
   m_FlexibleWidth: -1
   m_FlexibleHeight: 0
   m_LayoutPriority: 1
---- !u!114 &561246525127408603
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 5177713201277198403}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: aebfb45293b5f1348815ac8588681bd1, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  speakerText: {fileID: 1757140489122086547}
-  lineText: {fileID: 5028674476677517510}
 --- !u!1 &9195110789813344777
 GameObject:
   m_ObjectHideFlags: 0

@@ -2027,8 +2027,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7fcc70575df13524db493d979f5a664a, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  gold: 0
-  stamina: 10
+  logOps: 0
 --- !u!1 &383685294
 GameObject:
   m_ObjectHideFlags: 0
@@ -2200,6 +2199,7 @@ Transform:
   - {fileID: 249265174}
   - {fileID: 1675562613}
   - {fileID: 984589595}
+  - {fileID: 1267210217}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &446481149
@@ -13531,8 +13531,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   startNodeId: S1_N001
   dialogueUI: {fileID: 762087512}
-  endingPopupPrefab: {fileID: 0}
-  uiLayer: {fileID: 0}
+  endingPopupPrefab: {fileID: 7475114473759463841, guid: 870547aec11990b48860af9aa99b6ee0, type: 3}
+  uiLayer: {fileID: 270771027}
 --- !u!1 &892494937
 GameObject:
   m_ObjectHideFlags: 0
@@ -13545,7 +13545,6 @@ GameObject:
   - component: {fileID: 892494940}
   - component: {fileID: 892494939}
   - component: {fileID: 892494941}
-  - component: {fileID: 892494942}
   m_Layer: 5
   m_Name: 'BacklogPanel '
   m_TagString: Untagged
@@ -13624,26 +13623,6 @@ CanvasGroup:
   m_Interactable: 1
   m_BlocksRaycasts: 1
   m_IgnoreParentGroups: 0
---- !u!114 &892494942
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 892494937}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 55f3c4251de0796429336335873f4905, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  cg: {fileID: 892494941}
-  root: {fileID: 892494937}
-  scrollRect: {fileID: 1170921939}
-  content: {fileID: 1629942556}
-  logEntryPrefab: {fileID: 5177713201277198403, guid: f713bf6f67a81804a92afd2e5915090f, type: 3}
-  closeOnRightClick: 1
-  closeKey: 27
-  pauseDialogueInputWhileOpen: 1
 --- !u!1 &984589594
 GameObject:
   m_ObjectHideFlags: 0
@@ -14301,9 +14280,9 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 1675562615}
-        m_TargetAssemblyTypeName: QuickSaveLoadManager, Assembly-CSharp
-        m_MethodName: OnClickQuickLoad
+      - m_Target: {fileID: 1267210218}
+        m_TargetAssemblyTypeName: QuickSaveQuickLoadUI, Assembly-CSharp
+        m_MethodName: OnClickQuickLoadButton
         m_Mode: 1
         m_Arguments:
           m_ObjectArgument: {fileID: 0}
@@ -15096,6 +15075,53 @@ MonoBehaviour:
   indicator: {fileID: 1255892936}
   offsetX: 15
   offsetY: 0
+--- !u!1 &1267210216
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1267210217}
+  - component: {fileID: 1267210218}
+  m_Layer: 0
+  m_Name: QuickSaveQuickLoadUI
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1267210217
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1267210216}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 406078313}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1267210218
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1267210216}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 13e1f5daabf71d946bdd9008c3cae513, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  quickSlotIndex: 0
+  minLoadingSeconds: 1
+  overlaySortingOrder: 100000
 --- !u!1 &1282980000
 GameObject:
   m_ObjectHideFlags: 0
@@ -21089,18 +21115,14 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ef0d2933a7cffe745a069a06c4631165, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  dialogueManager: {fileID: 888632997}
   quickSlotIndex: 0
+  minLoadingSeconds: 1
   confirmPopupPrefab: {fileID: 3029798290004052079, guid: f5a4d89e4d5ecff499e6daa1bd1090b4, type: 3}
-  confirmGroup: {fileID: 0}
-  confirmMessage: {fileID: 0}
-  confirmYesButton: {fileID: 0}
-  confirmNoButton: {fileID: 0}
-  loadingOverlayPrefab: {fileID: 0}
-  loadingGroup: {fileID: 0}
-  loadingText: {fileID: 0}
-  loadingBar: {fileID: 0}
-  saveGameStateSidecar: 1
+  loadingOverlayPrefab: {fileID: 1879773669514434360, guid: d4e583212c8bcb84cabdb3e6363630bd, type: 3}
+  parentCanvas: {fileID: 0}
+  confirmYesButtonName: Yes
+  confirmNoButtonName: No
+  loadingTextNameContains: Text
 --- !u!1 &1710688429
 GameObject:
   m_ObjectHideFlags: 0
@@ -21833,7 +21855,7 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 892494942}
+      - m_Target: {fileID: 0}
         m_TargetAssemblyTypeName: Game.OverlayUI.BacklogPanelController, Assembly-CSharp
         m_MethodName: Toggle
         m_Mode: 1
@@ -22391,9 +22413,9 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 1675562615}
-        m_TargetAssemblyTypeName: QuickSaveLoadManager, Assembly-CSharp
-        m_MethodName: OnClickQuickSave
+      - m_Target: {fileID: 1267210218}
+        m_TargetAssemblyTypeName: QuickSaveQuickLoadUI, Assembly-CSharp
+        m_MethodName: OnClickQuickSaveButton
         m_Mode: 1
         m_Arguments:
           m_ObjectArgument: {fileID: 0}

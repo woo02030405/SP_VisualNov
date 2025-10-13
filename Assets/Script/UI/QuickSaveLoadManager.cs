@@ -1,10 +1,9 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
-using System.IO;
 using System.Reflection;
-using System.Text;
 using UnityEngine;
-using UnityEngine.SceneManagement;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
 using TMPro;
 using VN.SaveSystem;
@@ -12,531 +11,649 @@ using VN.SaveSystem;
 [DisallowMultipleComponent]
 public class QuickSaveLoadManager : MonoBehaviour
 {
-    [Header("REQUIRED")]
-    [Tooltip("반드시 DialogueManager 컴포넌트를 드래그해서 넣어주세요.")]
-    public MonoBehaviour dialogueManager;   // 수동 할당 필수
-
-    [Header("Quick Slot")]
+    [Header("Slot & Behavior")]
     public int quickSlotIndex = 0;
+    public float minLoadingSeconds = 1f;
 
-    // ───────── Confirm Popup (Prefab-based / optional) ─────────
-    [Header("Confirm Popup (Prefab or Instance, optional)")]
-    [Tooltip("이 프리팹을 넣으면 런타임에 자동으로 인스턴스 생성/바인딩됩니다.")]
-    public GameObject confirmPopupPrefab;         // 프리팹(선택)
-    [Tooltip("이미 씬에 존재하는 Confirm Popup 루트 CanvasGroup (프리팹 미사용 시)")]
-    public CanvasGroup confirmGroup;              // 인스턴스 루트
-    public TMP_Text confirmMessage;
-    public Button confirmYesButton;
-    public Button confirmNoButton;
+    [Header("(Optional) Prefabs")]
+    public GameObject confirmPopupPrefab;
+    public GameObject loadingOverlayPrefab;
 
-    // ───────── Loading Overlay (Prefab-based / optional) ─────────
-    [Header("Loading Overlay (Prefab or Instance, optional)")]
-    [Tooltip("이 프리팹을 넣으면 런타임에 자동으로 인스턴스 생성/바인딩됩니다.")]
-    public GameObject loadingOverlayPrefab;       // 프리팹(선택)
-    [Tooltip("이미 씬에 존재하는 Loading Overlay 루트 CanvasGroup (프리팹 미사용 시)")]
-    public CanvasGroup loadingGroup;              // 인스턴스 루트
-    public TMP_Text loadingText;
-    public Slider loadingBar;
+    [Header("(Optional) Parent Canvas")]
+    public Canvas parentCanvas;
 
-    // ───────── 사이드카 저장/로드 (씬 이름 자동 전환) ─────────
-    [Header("Sidecar Save")]
-    public bool saveGameStateSidecar = true;   // _gs.json에 씬 이름 등 저장/로드
+    [Header("Search Keys in Prefabs")]
+    public string confirmYesButtonName = "Yes";
+    public string confirmNoButtonName = "No";
+    public string loadingTextNameContains = "Text";
 
-    private bool _inited;
-    private Action _pendingYes;
+    // runtime
+    bool _inited;
+    GameObject _confirmGO, _loadingGO;
+    CanvasGroup _confirmGroup, _loadingGroup;
+    TMP_Text _confirmLabel, _loadingLabel;
+    Button _confirmYesBtn, _confirmNoBtn;
+    Action _pendingYes;
 
-    void Awake()
+    void Awake() => InitOnce();
+
+    void InitOnce()
     {
-        if (dialogueManager == null)
+        if (_inited) return;
+
+        EnsureEventSystem();
+        EnsureParentCanvas();
+
+        BuildOrBindConfirm();
+        BuildOrBindLoading();
+
+        SetGroup(_confirmGroup, false);
+        SetGroup(_loadingGroup, false);
+
+        WireConfirmButtons();
+
+        // SaveManager 콜백 묶기
+        if (SaveManager.Instance != null)
         {
-            Debug.LogError("[QuickSaveLoadManager] dialogueManager가 비었습니다. 인스펙터에 반드시 할당하세요.");
-            return;
+            SaveManager.Instance.OnBuildSaveData = BuildSaveData;
+            SaveManager.Instance.OnApplySaveData = ApplySaveData;
         }
-
-        // 프리팹 → 자동 인스턴스 & 바인딩
-        TrySpawnAndBindConfirmPrefab();
-        TrySpawnAndBindLoadingPrefab();
-
-        // Confirm 리스너
-        if (confirmYesButton != null)
-        {
-            confirmYesButton.onClick.RemoveAllListeners();
-            confirmYesButton.onClick.AddListener(() => { HideConfirm(); _pendingYes?.Invoke(); _pendingYes = null; });
-        }
-        if (confirmNoButton != null)
-        {
-            confirmNoButton.onClick.RemoveAllListeners();
-            confirmNoButton.onClick.AddListener(() => { HideConfirm(); _pendingYes = null; });
-        }
-
-        // 시작 시 숨김
-        SetGroup(confirmGroup, false);
-        SetGroup(loadingGroup, false);
-
-        // Save/Load 콜백: 스토리 위치 저장/적용
-        SaveManager.Instance.OnBuildSaveData = BuildSaveData;
-        SaveManager.Instance.OnApplySaveData = ApplySaveData;
 
         _inited = true;
+        Debug.Log("[QSLM] Init complete.");
     }
 
-    // ─────────────────────────────────────────────────────────────
-    // Prefab instantiation helpers
-    // ─────────────────────────────────────────────────────────────
-    void TrySpawnAndBindConfirmPrefab()
-    {
-        // 이미 수동 연결되어 있으면 스킵
-        if (confirmGroup != null && confirmYesButton != null) return;
-
-        if (confirmPopupPrefab == null) return;
-
-        var inst = Instantiate(confirmPopupPrefab);
-        DontDestroyOnLoad(inst); // 필요시 제거 가능
-        // 자동 바인딩: 자식에서 찾아 연결
-        confirmGroup = FindInChildren<CanvasGroup>(inst.transform);
-        confirmMessage = FindInChildren<TMP_Text>(inst.transform, nameContains: "Message");
-        // 버튼 이름 힌트: "Yes", "No" 포함한 오브젝트 우선
-        confirmYesButton = FindButtonByName(inst.transform, "Yes") ?? FindInChildren<Button>(inst.transform);
-        confirmNoButton = FindButtonByName(inst.transform, "No");
-        if (confirmGroup == null)
-            Debug.LogWarning("[QuickSaveLoadManager] Confirm prefab에서 CanvasGroup을 찾지 못했습니다. 루트에 CanvasGroup을 넣어주세요.");
-    }
-
-    void TrySpawnAndBindLoadingPrefab()
-    {
-        if (loadingGroup != null) return;
-
-        if (loadingOverlayPrefab == null) return;
-
-        var inst = Instantiate(loadingOverlayPrefab);
-        DontDestroyOnLoad(inst);
-        loadingGroup = FindInChildren<CanvasGroup>(inst.transform);
-        loadingText = FindInChildren<TMP_Text>(inst.transform, nameContains: "Text");
-        loadingBar = FindInChildren<Slider>(inst.transform);
-        if (loadingGroup == null)
-            Debug.LogWarning("[QuickSaveLoadManager] Loading prefab에서 CanvasGroup을 찾지 못했습니다. 루트에 CanvasGroup을 넣어주세요.");
-    }
-
-    T FindInChildren<T>(Transform root, string nameContains = null) where T : Component
-    {
-        var comps = root.GetComponentsInChildren<T>(true);
-        if (comps == null || comps.Length == 0) return null;
-        if (string.IsNullOrEmpty(nameContains)) return comps[0];
-        foreach (var c in comps)
-            if (c.name.IndexOf(nameContains, StringComparison.OrdinalIgnoreCase) >= 0)
-                return c;
-        return comps[0];
-    }
-    Button FindButtonByName(Transform root, string key)
-    {
-        var btns = root.GetComponentsInChildren<Button>(true);
-        foreach (var b in btns)
-            if (b.name.IndexOf(key, StringComparison.OrdinalIgnoreCase) >= 0)
-                return b;
-        return null;
-    }
-
-    // ─────────────────────────────────────────────────────────────
-    // 버튼 훅
-    // ─────────────────────────────────────────────────────────────
+    // ========== Public OnClick ==========
     public void OnClickQuickSave()
     {
-        if (!_inited) return;
-
-        if (confirmGroup != null && confirmYesButton != null)
-            ShowConfirm("퀵세이브 하시겠습니까?", () => StartCoroutine(SaveFlow()));
-        else
-            StartCoroutine(SaveFlow());
+        InitOnce();
+        ShowConfirm("퀵세이브 하시겠습니까?", () => StartCoroutine(SaveFlow()));
     }
 
     public void OnClickQuickLoad()
     {
-        if (!_inited) return;
-
-        var mainPath = Path.Combine(Application.persistentDataPath, $"save_slot_{quickSlotIndex}.json");
-        if (!File.Exists(mainPath))
-        {
-            if (confirmGroup && confirmMessage)
-                ShowConfirm("퀵세이브 데이터가 없습니다.", null);
-            else
-                Debug.LogWarning("[QuickSaveLoadManager] QuickLoad: no save file.");
-            return;
-        }
-
-        if (confirmGroup != null && confirmYesButton != null)
-            ShowConfirm("퀵로드 하시겠습니까?\n현재 진행이 사라질 수 있습니다.", () => StartCoroutine(LoadFlow()));
-        else
-            StartCoroutine(LoadFlow());
+        InitOnce();
+        ShowConfirm("퀵로드 하시겠습니까?", () => StartCoroutine(LoadFlow()));
     }
 
-    // ─────────────────────────────────────────────────────────────
-    // 플로우
-    // ─────────────────────────────────────────────────────────────
-    private System.Collections.IEnumerator SaveFlow()
+    // ========== Flows ==========
+    IEnumerator SaveFlow()
     {
-        ShowLoading("Saving...", 0f);
+        float shownAt = Time.realtimeSinceStartup;
+        ShowLoading("Saving...");
         yield return null;
 
-        // 1) 슬롯 저장(스토리 위치)
-        SaveManager.Instance.Save(quickSlotIndex);
+        if (SaveManager.Instance != null) SaveManager.Instance.Save(quickSlotIndex);
+        else Debug.LogWarning("[QSLM] SaveManager.Instance is null");
 
-        // 2) 사이드카 저장(씬 이름 포함)
-        if (saveGameStateSidecar) SaveSidecarSceneName(quickSlotIndex);
-
-        UpdateLoading(1f);
-        yield return new WaitForEndOfFrame();
+        float remain = minLoadingSeconds - (Time.realtimeSinceStartup - shownAt);
+        if (remain > 0f) yield return new WaitForSecondsRealtime(remain);
         HideLoading();
-        Debug.Log($"[QuickSaveLoadManager] QuickSave → slot {quickSlotIndex}");
     }
 
-    private System.Collections.IEnumerator LoadFlow()
+    IEnumerator LoadFlow()
     {
-        ShowLoading("Loading...", 0f);
+        float shownAt = Time.realtimeSinceStartup;
+        ShowLoading("Loading...");
         yield return null;
 
-        // 1) 슬롯 로드(스토리 위치 적용 → ApplySaveData 호출됨)
-        SaveManager.Instance.Load(quickSlotIndex);
+        if (SaveManager.Instance != null) SaveManager.Instance.Load(quickSlotIndex);
+        else Debug.LogWarning("[QSLM] SaveManager.Instance is null");
 
-        // 2) 사이드카에 씬 이름이 있으면 자동 전환
-        if (saveGameStateSidecar)
-        {
-            var targetScene = LoadSidecarSceneName(quickSlotIndex);
-            var active = SceneManager.GetActiveScene().name;
-            if (!string.IsNullOrEmpty(targetScene) && !string.Equals(active, targetScene, StringComparison.Ordinal))
-            {
-                yield return LoadSceneAsync(targetScene);
-                // 씬이 바뀌면 다시 한 번 저장된 슬롯을 로드하여 점프를 확실히 보장
-                SaveManager.Instance.Load(quickSlotIndex);
-            }
-        }
-
-        UpdateLoading(1f);
-        yield return new WaitForEndOfFrame();
+        float remain = minLoadingSeconds - (Time.realtimeSinceStartup - shownAt);
+        if (remain > 0f) yield return new WaitForSecondsRealtime(remain);
         HideLoading();
-        Debug.Log($"[QuickSaveLoadManager] QuickLoad ← slot {quickSlotIndex}");
     }
 
-    // ─────────────────────────────────────────────────────────────
-    // Save/Load 콜백 (스토리 위치 저장/적용)
-    // ─────────────────────────────────────────────────────────────
-    private SaveData BuildSaveData()
+    // ========== SaveData Build / Apply ==========
+    SaveData BuildSaveData()
     {
         var d = new SaveData();
 
-        // 1) DialogueManager가 현재 위치를 직접 제공하면 우선 사용
-        if (TryGetTriple(dialogueManager, out var ch, out var sc, out var nid))
-        {
-            d.story.chapter = ch;
-            d.story.scene = sc;
-            d.story.nodeId = nid;
-        }
+        // 스토리 위치 (프로젝트 API에 맞게 자동 탐색)
+        d.story.chapter = TryGetString("DialogueManager", "CurrentChapter") ?? d.story.chapter;
+        d.story.scene = TryGetString("DialogueManager", "CurrentScene") ?? d.story.scene;
+        d.story.nodeId = TryGetString("DialogueManager", "CurrentNodeId") ?? d.story.nodeId;
+
+        // CSV: 경로(Resources 키) 우선 저장, 없으면 라인 덤프
+        var csvPath = TryGetCurrentCsvPath();
+        if (!string.IsNullOrEmpty(csvPath)) d.story.csvPath = csvPath;
         else
         {
-            // 2) 없으면 NodeId만 가져와 파싱
-            var nodeId = TryGetCurrentNodeId(dialogueManager) ?? "N001";
-            d.story.nodeId = nodeId;
-            TryParseNodeId(nodeId, out var ch2, out var sc2, out _);
-            d.story.chapter = string.IsNullOrEmpty(ch2) ? "CH1" : ch2;
-            d.story.scene = string.IsNullOrEmpty(sc2) ? "SC1" : sc2;
+            var rows = TryExportCsvRows();
+            if (rows != null && rows.Length > 0) d.story.csvRows = new List<string>(rows);
         }
 
-        d.title = $"[{d.story.chapter}/{d.story.scene}] {d.story.nodeId}";
+        // 인벤토리/호감도
+        var inv = TryExportDict("InventoryManager", "Export", "ToPairs");
+        if (inv != null) d.player.inventory = inv;
+
+        var aff = TryExportDict("AffinityManager", "Export", "ToPairs");
+        if (aff != null) d.player.affinity = aff;
+
+        // 월드 상태(있으면)
+        var day = TryGetInt("WorldManager", "Day"); if (day.HasValue) d.world.day = day.Value;
+        var timeSlot = TryGetString("WorldManager", "Time"); if (!string.IsNullOrEmpty(timeSlot)) d.world.timeSlot = timeSlot;
+        var curMap = TryGetString("WorldManager", "Map"); if (!string.IsNullOrEmpty(curMap)) d.world.currentMap = curMap;
+
+        // 메타
+        d.title = $"DAY{d.world.day:D2} - {d.world.timeSlot}";
         d.dateTime = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+        d.system.saveSlot = quickSlotIndex;
+        d.system.timestamp = d.dateTime;
+
+        // 1줄: 읽음/백로그를 SaveData.story에 채워넣기
+        ReadSkipBacklogManager.Instance?.ExportToSave(d.story);
+
+
         return d;
     }
 
-    private void ApplySaveData(SaveData d)
+    void ApplySaveData(SaveData d)
     {
         if (d == null) return;
-        StartCoroutine(WaitReadyThenJump(d)); // 씬 전환은 LoadFlow에서 처리
-    }
 
-    // ─────────────────────────────────────────────────────────────
-    // 씬 전환 + 준비 대기 + 점프
-    // ─────────────────────────────────────────────────────────────
-    private System.Collections.IEnumerator LoadSceneAsync(string scene)
-    {
-        ShowLoading("Loading Scene...", 0f);
-        var op = SceneManager.LoadSceneAsync(scene, LoadSceneMode.Single);
-        while (!op.isDone)
-        {
-            UpdateLoading(op.progress);
-            yield return null;
-        }
-        yield return null; // one more frame
-    }
+        // ⬇⬇⬇ 여기 1줄: 저장돼 있던 읽음/백로그를 런타임 메모리로 복원
+        ReadSkipBacklogManager.Instance?.ImportFromSave(d.story);
 
-    private System.Collections.IEnumerator WaitReadyThenJump(SaveData d)
-    {
-        ShowLoading("Preparing...", 0.9f);
+        // CSV 복원
+        if (!string.IsNullOrEmpty(d.story.csvPath)) TryLoadCsvByPath(d.story.csvPath);
+        else if (d.story.csvRows != null && d.story.csvRows.Count > 0) TryLoadCsvByRows(d.story.csvRows);
 
-        float timeout = 5f, t = 0f;
-        while (!IsDialogueReady(dialogueManager))
-        {
-            t += Time.unscaledDeltaTime;
-            if (t > timeout) break;
-            yield return null;
-        }
+        // 인벤토리/호감도 복원
+        if (d.player.inventory != null) TryImportDict("InventoryManager", "Import", "FromPairs", d.player.inventory);
+        if (d.player.affinity != null) TryImportDict("AffinityManager", "Import", "FromPairs", d.player.affinity);
 
-        bool done = false;
-
+        // 노드 점프(실패 시 후보)
         if (!string.IsNullOrEmpty(d.story.nodeId))
-            done = TryJumpToNode(dialogueManager, d.story.nodeId);
-
-        if (!done)
         {
-            foreach (var cand in BuildNodeIdCandidates(d.story.chapter, d.story.scene, d.story.nodeId))
+            if (!TryJumpToNode(d.story.nodeId))
             {
-                if (TryJumpToNode(dialogueManager, cand)) { done = true; break; }
+                foreach (var cand in BuildNodeIdCandidates(d.story.chapter, d.story.scene, d.story.nodeId))
+                    if (TryJumpToNode(cand)) break;
             }
         }
 
-        if (!done) Debug.LogWarning("[QuickSaveLoadManager] Jump failed, keeping current node.");
+        // 월드 상태
+        TrySetInt("WorldManager", "Day", d.world.day);
+        TrySetString("WorldManager", "Time", d.world.timeSlot);
+        TrySetString("WorldManager", "Map", d.world.currentMap);
     }
 
-    // ─────────────────────────────────────────────────────────────
-    // 사이드카(씬 이름) 저장/로드
-    // ─────────────────────────────────────────────────────────────
-    private string SidecarPath(int slot) =>
-        Path.Combine(Application.persistentDataPath, $"save_slot_{slot}_gs.json");
-
-    private void SaveSidecarSceneName(int slot)
+    IEnumerable<string> BuildNodeIdCandidates(string chapter, string scene, string nodeId)
     {
-        var payload = new GameStatePayload
-        {
-            gameSceneName = SceneManager.GetActiveScene().name
-        };
-        var json = JsonUtility.ToJson(payload, prettyPrint: false);
-        File.WriteAllText(SidecarPath(slot), json, Encoding.UTF8);
-        Debug.Log($"[QuickSaveLoadManager] Saved sidecar(scene) → {SidecarPath(slot)}");
+        if (!string.IsNullOrEmpty(nodeId)) yield return nodeId;
+        if (!string.IsNullOrEmpty(chapter) && !string.IsNullOrEmpty(scene) && !string.IsNullOrEmpty(nodeId))
+            yield return $"{chapter}/{scene}/{nodeId}";
+        if (!string.IsNullOrEmpty(scene) && !string.IsNullOrEmpty(nodeId))
+            yield return $"{scene}/{nodeId}";
     }
 
-    private string LoadSidecarSceneName(int slot)
+    // ========== UI (Confirm / Loading) ==========
+    void ShowConfirm(string message, Action onYes)
     {
-        var path = SidecarPath(slot);
-        if (!File.Exists(path)) return null;
-
-        var json = File.ReadAllText(path, Encoding.UTF8);
-        var payload = JsonUtility.FromJson<GameStatePayload>(json);
-        if (payload == null) return null;
-
-        return payload.gameSceneName;
-    }
-
-    // ─────────────────────────────────────────────────────────────
-    // Confirm & Loading helpers
-    // ─────────────────────────────────────────────────────────────
-    private void ShowConfirm(string message, Action onYes)
-    {
-        if (confirmGroup == null || confirmYesButton == null)
-        {
-            onYes?.Invoke(); // 없으면 바로 진행
-            return;
-        }
         _pendingYes = onYes;
-        if (confirmMessage) confirmMessage.text = message;
-        SetGroup(confirmGroup, true);
+        if (_confirmLabel) _confirmLabel.text = string.IsNullOrEmpty(message) ? "Are you sure?" : message;
+        ForceActivateHierarchy(_confirmGroup?.transform, true);
+        RaiseToTop(_confirmGO, 90000);
+        SetGroup(_confirmGroup, true);
     }
-    private void HideConfirm() => SetGroup(confirmGroup, false);
+    void HideConfirm() => SetGroup(_confirmGroup, false);
 
-    private void ShowLoading(string text, float progress = 0f)
+    void ShowLoading(string message)
     {
-        if (loadingText) loadingText.text = text;
-        if (loadingBar) loadingBar.value = Mathf.Clamp01(progress);
-        SetGroup(loadingGroup, true);
+        if (_loadingLabel) _loadingLabel.text = string.IsNullOrEmpty(message) ? "Loading..." : message;
+        ForceActivateHierarchy(_loadingGroup?.transform, true);
+        RaiseToTop(_loadingGO, 90000);
+        SetGroup(_loadingGroup, true);
     }
-    private void UpdateLoading(float progress)
-    {
-        if (loadingBar) loadingBar.value = Mathf.Clamp01(progress);
-    }
-    private void HideLoading() => SetGroup(loadingGroup, false);
+    void HideLoading() => SetGroup(_loadingGroup, false);
 
-    private static void SetGroup(CanvasGroup cg, bool on)
+    void BuildOrBindConfirm()
+    {
+        if (confirmPopupPrefab)
+        {
+            _confirmGO = Instantiate(confirmPopupPrefab, parentCanvas.transform);
+            _confirmGO.SetActive(true);
+            ForceRectStretch(_confirmGO.transform as RectTransform);
+            EnsureOverlayTopCanvas(_confirmGO, 90000);
+
+            _confirmGroup = FindOrAdd<CanvasGroup>(_confirmGO);
+            _confirmLabel = FindFirst<TextMeshProUGUI>(_confirmGO);
+            _confirmYesBtn = FindButtonByName(_confirmGO.transform, confirmYesButtonName);
+            _confirmNoBtn = FindButtonByName(_confirmGO.transform, confirmNoButtonName);
+            if (_confirmYesBtn == null || _confirmNoBtn == null) BuildDefaultConfirmButtons(_confirmGO.transform);
+        }
+        else
+        {
+            BuildRuntimeConfirm();
+        }
+    }
+
+    void BuildOrBindLoading()
+    {
+        if (loadingOverlayPrefab)
+        {
+            _loadingGO = Instantiate(loadingOverlayPrefab, parentCanvas.transform);
+            _loadingGO.SetActive(true);
+            ForceRectStretch(_loadingGO.transform as RectTransform);
+            EnsureOverlayTopCanvas(_loadingGO, 90000);
+
+            _loadingGroup = FindOrAdd<CanvasGroup>(_loadingGO);
+            _loadingLabel = FindNameContains<TextMeshProUGUI>(_loadingGO, loadingTextNameContains) ?? FindFirst<TextMeshProUGUI>(_loadingGO);
+        }
+        else
+        {
+            BuildRuntimeLoading();
+        }
+    }
+
+    void WireConfirmButtons()
+    {
+        if (_confirmYesBtn)
+        {
+            _confirmYesBtn.onClick.RemoveAllListeners();
+            _confirmYesBtn.onClick.AddListener(() =>
+            {
+                HideConfirm();
+                _pendingYes?.Invoke();
+                _pendingYes = null;
+            });
+        }
+        if (_confirmNoBtn)
+        {
+            _confirmNoBtn.onClick.RemoveAllListeners();
+            _confirmNoBtn.onClick.AddListener(() =>
+            {
+                HideConfirm();
+                _pendingYes = null;
+            });
+        }
+    }
+
+    void BuildRuntimeConfirm()
+    {
+        _confirmGO = new GameObject("__Confirm__", typeof(RectTransform), typeof(CanvasGroup));
+        _confirmGO.transform.SetParent(parentCanvas.transform, false);
+        ForceRectStretch(_confirmGO.transform as RectTransform);
+        EnsureOverlayTopCanvas(_confirmGO, 90000);
+
+        _confirmGroup = _confirmGO.GetComponent<CanvasGroup>();
+        _confirmGroup.alpha = 0; _confirmGroup.interactable = false; _confirmGroup.blocksRaycasts = false;
+
+        var bg = new GameObject("BG", typeof(RectTransform), typeof(Image));
+        bg.transform.SetParent(_confirmGO.transform, false);
+        ForceRectStretch(bg.transform as RectTransform);
+        bg.GetComponent<Image>().color = new Color(0, 0, 0, 0.6f);
+
+        var panel = new GameObject("Panel", typeof(RectTransform), typeof(Image));
+        var prt = panel.GetComponent<RectTransform>();
+        panel.transform.SetParent(_confirmGO.transform, false);
+        prt.sizeDelta = new Vector2(640, 240);
+        panel.GetComponent<Image>().color = new Color(0.15f, 0.15f, 0.15f, 0.95f);
+
+        _confirmLabel = NewTMP(panel.transform, "확인하시겠습니까?", 30, new Vector2(0, 40), new Vector2(560, 100));
+        _confirmYesBtn = NewBtn(panel.transform, "확인", new Vector2(-110, -60), 180, 56);
+        _confirmNoBtn = NewBtn(panel.transform, "취소", new Vector2(110, -60), 180, 56);
+
+        WireConfirmButtons();
+    }
+
+    void BuildRuntimeLoading()
+    {
+        _loadingGO = new GameObject("__Loading__", typeof(RectTransform), typeof(CanvasGroup));
+        _loadingGO.transform.SetParent(parentCanvas.transform, false);
+        ForceRectStretch(_loadingGO.transform as RectTransform);
+        EnsureOverlayTopCanvas(_loadingGO, 90000);
+
+        _loadingGroup = _loadingGO.GetComponent<CanvasGroup>();
+        _loadingGroup.alpha = 0; _loadingGroup.interactable = false; _loadingGroup.blocksRaycasts = false;
+
+        var bg = new GameObject("BG", typeof(RectTransform), typeof(Image));
+        bg.transform.SetParent(_loadingGO.transform, false);
+        ForceRectStretch(bg.transform as RectTransform);
+        bg.GetComponent<Image>().color = new Color(0, 0, 0, 0.6f);
+
+        var panel = new GameObject("Panel", typeof(RectTransform), typeof(Image));
+        var prt = panel.GetComponent<RectTransform>();
+        panel.transform.SetParent(_loadingGO.transform, false);
+        prt.sizeDelta = new Vector2(640, 180);
+        panel.GetComponent<Image>().color = new Color(0.15f, 0.15f, 0.15f, 0.95f);
+
+        _loadingLabel = NewTMP(panel.transform, "Loading...", 30, new Vector2(0, 0), new Vector2(560, 80));
+    }
+
+    void BuildDefaultConfirmButtons(Transform panel)
+    {
+        if (_confirmLabel == null)
+            _confirmLabel = NewTMP(panel, "확인하시겠습니까?", 30, new Vector2(0, 40), new Vector2(560, 100));
+
+        if (_confirmYesBtn == null)
+            _confirmYesBtn = NewBtn(panel, "확인", new Vector2(-110, -60), 180, 56);
+        if (_confirmNoBtn == null)
+            _confirmNoBtn = NewBtn(panel, "취소", new Vector2(110, -60), 180, 56);
+
+        WireConfirmButtons();
+    }
+
+    // ========== CSV & Manager access (reflection) ==========
+    string TryGetCurrentCsvPath()
+    {
+        var s = TryGetString("DialogueManager", "CurrentCsvPath");
+        if (!string.IsNullOrEmpty(s)) return NormalizeCSVResourcePath(s);
+
+        var m = TryCall<string>("DialogueManager", "GetCurrentCsvPath");
+        if (!string.IsNullOrEmpty(m)) return NormalizeCSVResourcePath(m);
+        return null;
+    }
+
+    string[] TryExportCsvRows() => TryCall<string[]>("DialogueManager", "ExportCsvRows");
+
+    void TryLoadCsvByPath(string csvResKey)
+    {
+        if (TryCallVoid("DialogueManager", "LoadCsvByPath", csvResKey)) return;
+
+        var ta = Resources.Load<TextAsset>(csvResKey);
+        if (ta)
+        {
+            var rows = ta.text.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
+            TryLoadCsvByRows(rows);
+        }
+    }
+
+    void TryLoadCsvByRows(IList<string> rows)
+    {
+        if (rows == null || rows.Count == 0) return;
+        TryCallVoid("DialogueManager", "LoadCsvRows", rows is string[] sa ? sa : new List<string>(rows).ToArray());
+    }
+
+    string NormalizeCSVResourcePath(string anyPath)
+    {
+        if (string.IsNullOrEmpty(anyPath)) return null;
+        anyPath = anyPath.Replace("\\", "/");
+        var idx = anyPath.IndexOf("Resources/", StringComparison.OrdinalIgnoreCase);
+        if (idx >= 0) anyPath = anyPath[(idx + "Resources/".Length)..];
+        if (anyPath.EndsWith(".csv", StringComparison.OrdinalIgnoreCase))
+            anyPath = anyPath[..^4];
+        return anyPath; // ex) "CSV/Ch1_MainStory_kr"
+    }
+
+    Dictionary<string, int> TryExportDict(string managerType, string exportMethod, string pairsMethod)
+    {
+        var dict = TryCall<Dictionary<string, int>>(managerType, exportMethod);
+        if (dict != null) return dict;
+
+        var pairs = TryCall<System.Collections.IEnumerable>(managerType, pairsMethod);
+        if (pairs != null)
+        {
+            var d = new Dictionary<string, int>();
+            foreach (var it in pairs)
+            {
+                var t = it.GetType();
+                var k = t.GetProperty("Key")?.GetValue(it) as string;
+                var v = (int)(t.GetProperty("Value")?.GetValue(it) ?? 0);
+                if (!string.IsNullOrEmpty(k)) d[k] = v;
+            }
+            return d;
+        }
+        return null;
+    }
+
+    void TryImportDict(string managerType, string importMethod, string fromPairsMethod, Dictionary<string, int> dict)
+    {
+        if (dict == null) return;
+        if (TryCallVoid(managerType, importMethod, dict)) return;
+
+        var listType = typeof(List<>).MakeGenericType(typeof(KeyValuePair<string, int>));
+        var list = Activator.CreateInstance(listType);
+        var add = listType.GetMethod("Add");
+        foreach (var kv in dict) add.Invoke(list, new object[] { new KeyValuePair<string, int>(kv.Key, kv.Value) });
+
+        TryCallVoid(managerType, fromPairsMethod, list);
+    }
+
+    bool TryJumpToNode(string nodeId)
+        => TryCallVoid("DialogueManager", "JumpToNode", nodeId) || TryCallVoid("DialogueManager", "SetNode", nodeId);
+
+    // ========== Reflection helpers ==========
+    string TryGetString(string typeName, string propOrMethod)
+    {
+        var inst = FindSingleton(typeName);
+        if (!inst) return null;
+
+        var t = inst.GetType();
+        var p = t.GetProperty(propOrMethod, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+        if (p != null && p.PropertyType == typeof(string)) return p.GetValue(inst) as string;
+
+        var m = t.GetMethod("Get" + propOrMethod, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, Type.EmptyTypes, null);
+        if (m != null && m.ReturnType == typeof(string)) return (string)m.Invoke(inst, null);
+        return null;
+    }
+
+    int? TryGetInt(string typeName, string propOrMethod)
+    {
+        var inst = FindSingleton(typeName);
+        if (!inst) return null;
+
+        var t = inst.GetType();
+        var p = t.GetProperty(propOrMethod, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+        if (p != null && p.PropertyType == typeof(int)) return (int)p.GetValue(inst);
+
+        var m = t.GetMethod("Get" + propOrMethod, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, Type.EmptyTypes, null);
+        if (m != null && m.ReturnType == typeof(int)) return (int)m.Invoke(inst, null);
+        return null;
+    }
+
+    void TrySetString(string typeName, string prop, string value)
+    {
+        var inst = FindSingleton(typeName);
+        if (!inst) return;
+
+        var t = inst.GetType();
+        var p = t.GetProperty(prop, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+        if (p != null && p.CanWrite && p.PropertyType == typeof(string)) { p.SetValue(inst, value); return; }
+
+        var m = t.GetMethod("Set" + prop, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, new[] { typeof(string) }, null);
+        if (m != null) m.Invoke(inst, new object[] { value });
+    }
+
+    void TrySetInt(string typeName, string prop, int value)
+    {
+        var inst = FindSingleton(typeName);
+        if (!inst) return;
+
+        var t = inst.GetType();
+        var p = t.GetProperty(prop, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+        if (p != null && p.CanWrite && p.PropertyType == typeof(int)) { p.SetValue(inst, value); return; }
+
+        var m = t.GetMethod("Set" + prop, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, new[] { typeof(int) }, null);
+        if (m != null) m.Invoke(inst, new object[] { value });
+    }
+
+    object TryCall(string typeName, string method, Type returnType, params object[] args)
+    {
+        var inst = FindSingleton(typeName);
+        if (!inst) return null;
+        var t = inst.GetType();
+        var argTypes = Array.ConvertAll(args ?? Array.Empty<object>(), a => a?.GetType() ?? typeof(object));
+        var m = t.GetMethod(method, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, argTypes, null);
+        if (m == null) return null;
+        return m.Invoke(inst, args);
+    }
+
+    bool TryCallVoid(string typeName, string method, params object[] args)
+        => TryCall(typeName, method, typeof(void), args) != null;
+
+    T TryCall<T>(string typeName, string method)
+    {
+        var inst = FindSingleton(typeName);
+        if (!inst) return default;
+        var t = inst.GetType();
+        var m = t.GetMethod(method, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, Type.EmptyTypes, null);
+        if (m != null && typeof(T).IsAssignableFrom(m.ReturnType)) return (T)m.Invoke(inst, null);
+        return default;
+    }
+
+    Component FindSingleton(string typeName)
+    {
+        foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+        {
+            var t = asm.GetType(typeName);
+            if (t == null) continue;
+            var inst = FindObjectOfType(t, includeInactive: true) as Component;
+            if (inst) return inst;
+        }
+        return null;
+    }
+
+    // ========== UI Utils (여기 포함! FindButtonByName 정의됨) ==========
+    void EnsureEventSystem()
+    {
+        if (!FindObjectOfType<EventSystem>())
+        {
+            var es = new GameObject("EventSystem", typeof(EventSystem), typeof(StandaloneInputModule));
+            DontDestroyOnLoad(es);
+        }
+    }
+
+    void EnsureParentCanvas()
+    {
+        if (parentCanvas) return;
+        parentCanvas = FindObjectOfType<Canvas>();
+        if (!parentCanvas)
+        {
+            var go = new GameObject("__QS_Overlay__", typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
+            DontDestroyOnLoad(go);
+            parentCanvas = go.GetComponent<Canvas>();
+            parentCanvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            parentCanvas.sortingOrder = 80000;
+            go.GetComponent<CanvasScaler>().uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+        }
+    }
+
+    static void SetGroup(CanvasGroup cg, bool on)
     {
         if (!cg) return;
         cg.alpha = on ? 1f : 0f;
         cg.interactable = on;
         cg.blocksRaycasts = on;
-        if (cg.gameObject) cg.gameObject.SetActive(on);
     }
 
-    // ─────────────────────────────────────────────────────────────
-    // 유틸 (DM 접근 & 점프)
-    // ─────────────────────────────────────────────────────────────
-    private static bool IsDialogueReady(MonoBehaviour dm)
+    static void ForceActivateHierarchy(Transform t, bool on)
     {
-        if (dm == null) return false;
-        var flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+        if (!t) return;
+        for (var p = t; p != null; p = p.parent) p.gameObject.SetActive(on);
+    }
 
-        var pi = dm.GetType().GetProperty("IsReady", flags);
-        if (pi != null && pi.CanRead) { try { if (pi.GetValue(dm) is bool b && b) return true; } catch { } }
-        var fiR = dm.GetType().GetField("isReady", flags);
-        if (fiR != null) { try { if (fiR.GetValue(dm) is bool b && b) return true; } catch { } }
+    static void ForceRectStretch(RectTransform rt)
+    {
+        if (!rt) return;
+        rt.anchorMin = Vector2.zero; rt.anchorMax = Vector2.one;
+        rt.offsetMin = Vector2.zero; rt.offsetMax = Vector2.zero;
+        rt.localScale = Vector3.one; rt.anchoredPosition3D = Vector3.zero;
+    }
 
-        var fi = dm.GetType().GetField("dialogueNodes", flags);
-        if (fi != null)
+    void EnsureOverlayTopCanvas(GameObject go, int order)
+    {
+        var canvases = go.GetComponentsInChildren<Canvas>(true);
+        foreach (var c in canvases)
         {
-            try
-            {
-                var obj = fi.GetValue(dm);
-                if (obj is System.Collections.ICollection col && col.Count > 0) return true;
-            }
-            catch { }
+            c.renderMode = RenderMode.ScreenSpaceOverlay;
+            c.worldCamera = null;
+            c.overrideSorting = true;
+            c.sortingOrder = order;
+            if (!c.TryGetComponent<GraphicRaycaster>(out _)) c.gameObject.AddComponent<GraphicRaycaster>();
         }
-        return true; // 신호 없으면 대기 없이 진행
+        parentCanvas.renderMode = RenderMode.ScreenSpaceOverlay;
+        parentCanvas.overrideSorting = true;
+        parentCanvas.sortingOrder = Mathf.Max(parentCanvas.sortingOrder, order - 1);
     }
 
-    // DialogueManager가 (string chapter,string scene,string nodeId) 제공하면 사용
-    private static bool TryGetTriple(MonoBehaviour dm, out string chapter, out string scene, out string nodeId)
+    void RaiseToTop(GameObject go, int order)
     {
-        chapter = null; scene = null; nodeId = null;
-        if (dm == null) return false;
+        if (!go) return;
 
-        var flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
-        var mi = dm.GetType().GetMethod("GetCurrentTriple", flags);
-        if (mi != null && mi.GetParameters().Length == 0)
+        foreach (var c in go.GetComponentsInParent<Canvas>(true))
         {
-            try
-            {
-                var res = mi.Invoke(dm, null);
-                if (res is ValueType || res is object)
-                {
-                    chapter = GetTupleString(res, "Item1");
-                    scene = GetTupleString(res, "Item2");
-                    nodeId = GetTupleString(res, "Item3");
-                    if (!string.IsNullOrEmpty(nodeId)) return true;
-                }
-            }
-            catch { }
+            c.renderMode = RenderMode.ScreenSpaceOverlay;
+            c.worldCamera = null;
+            c.overrideSorting = true;
+            c.sortingOrder = order;
+            if (!c.TryGetComponent<GraphicRaycaster>(out _)) c.gameObject.AddComponent<GraphicRaycaster>();
         }
-        return false;
+        foreach (var c in go.GetComponentsInChildren<Canvas>(true))
+        {
+            c.renderMode = RenderMode.ScreenSpaceOverlay;
+            c.worldCamera = null;
+            c.overrideSorting = true;
+            c.sortingOrder = order + 1;
+            if (!c.TryGetComponent<GraphicRaycaster>(out _)) c.gameObject.AddComponent<GraphicRaycaster>();
+        }
+        parentCanvas.overrideSorting = true;
+        parentCanvas.sortingOrder = Mathf.Max(parentCanvas.sortingOrder, order - 1);
     }
-    private static string GetTupleString(object tuple, string itemName)
+
+    T FindOrAdd<T>(GameObject go) where T : Component
     {
-        if (tuple == null) return null;
-        var prop = tuple.GetType().GetProperty(itemName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-        if (prop == null || !prop.CanRead) return null;
-        return prop.GetValue(tuple) as string;
+        var c = go.GetComponentInChildren<T>(true);
+        if (!c) c = go.AddComponent<T>();
+        return c;
     }
 
-    private static string TryGetCurrentNodeId(MonoBehaviour dm)
+    T FindFirst<T>(GameObject go) where T : Component
     {
-        if (dm == null) return null;
-        var flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+        var arr = go.GetComponentsInChildren<T>(true);
+        return (arr != null && arr.Length > 0) ? arr[0] : null;
+    }
 
-        var mi = dm.GetType().GetMethod("GetCurrentNodeId", flags);
-        if (mi != null && mi.GetParameters().Length == 0)
-        { try { return mi.Invoke(dm, null) as string; } catch { } }
+    T FindNameContains<T>(GameObject go, string contains) where T : Component
+    {
+        if (string.IsNullOrEmpty(contains)) return FindFirst<T>(go);
+        var arr = go.GetComponentsInChildren<T>(true);
+        foreach (var a in arr)
+            if (a.name.IndexOf(contains, StringComparison.OrdinalIgnoreCase) >= 0)
+                return a;
+        return FindFirst<T>(go);
+    }
 
-        var pi = dm.GetType().GetProperty("CurrentNodeId", flags);
-        if (pi != null && pi.CanRead)
-        { try { return pi.GetValue(dm) as string; } catch { } }
-
-        var fi = dm.GetType().GetField("currentNodeId", flags);
-        if (fi != null)
-        { try { return fi.GetValue(dm) as string; } catch { } }
-
-        var fi2 = dm.GetType().GetField("nodeId", flags);
-        if (fi2 != null)
-        { try { return fi2.GetValue(dm) as string; } catch { } }
-
+    // ★ 여기! 누락돼서 에러가 났던 유틸
+    Button FindButtonByName(Transform root, string key)
+    {
+        if (!root || string.IsNullOrEmpty(key)) return null;
+        var buttons = root.GetComponentsInChildren<Button>(true);
+        foreach (var b in buttons)
+            if (b.name.IndexOf(key, StringComparison.OrdinalIgnoreCase) >= 0)
+                return b;
         return null;
     }
 
-    private static bool TryJumpToNode(MonoBehaviour dm, string nodeId)
+    TMP_Text NewTMP(Transform parent, string text, int fontSize, Vector2 anchored, Vector2 size)
     {
-        if (dm == null || string.IsNullOrEmpty(nodeId)) return false;
-        var flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+        var go = new GameObject("Text", typeof(RectTransform), typeof(TextMeshProUGUI));
+        var rt = go.GetComponent<RectTransform>();
+        rt.SetParent(parent, false);
+        rt.sizeDelta = size;
+        rt.anchoredPosition = anchored;
 
-        foreach (var name in new[] { "JumpToNode", "JumpTo", "GoToNode", "LoadNode", "StartAtNode",
-                                     "SetNode", "SetCurrentNode", "ResumeAtNode", "ContinueFromNode" })
-        {
-            var mi = dm.GetType().GetMethod(name, flags);
-            if (mi != null)
-            {
-                var ps = mi.GetParameters();
-                if (ps.Length == 1 && ps[0].ParameterType == typeof(string))
-                { try { mi.Invoke(dm, new object[] { nodeId }); return true; } catch { } }
-            }
-        }
-
-        bool injected = false;
-        var pi = dm.GetType().GetProperty("CurrentNodeId", flags);
-        if (pi != null && pi.CanWrite) { try { pi.SetValue(dm, nodeId); injected = true; } catch { } }
-        if (!injected)
-        {
-            var fi = dm.GetType().GetField("currentNodeId", flags);
-            if (fi != null) { try { fi.SetValue(dm, nodeId); injected = true; } catch { } }
-        }
-        if (!injected)
-        {
-            var fi2 = dm.GetType().GetField("nodeId", flags);
-            if (fi2 != null) { try { fi2.SetValue(dm, nodeId); injected = true; } catch { } }
-        }
-
-        if (injected)
-        {
-            foreach (var r in new[] { "ShowCurrentNode", "RefreshUI", "RefreshDialogue", "UpdateUI", "ApplyState", "Rebuild" })
-            {
-                var miR = dm.GetType().GetMethod(r, flags);
-                if (miR != null && miR.GetParameters().Length == 0)
-                { try { miR.Invoke(dm, null); return true; } catch { } }
-            }
-            return true;
-        }
-        return false;
+        var tmp = go.GetComponent<TextMeshProUGUI>();
+        tmp.text = text;
+        tmp.alignment = TextAlignmentOptions.Center;
+        tmp.fontSize = fontSize;
+        return tmp;
     }
 
-    private static bool TryParseNodeId(string nodeId, out string chapter, out string scene, out string node)
+    Button NewBtn(Transform parent, string label, Vector2 anchored, float w, float h)
     {
-        chapter = null; scene = null; node = null;
-        if (string.IsNullOrEmpty(nodeId)) return false;
+        var go = new GameObject(label, typeof(RectTransform), typeof(Image), typeof(Button));
+        var rt = go.GetComponent<RectTransform>();
+        rt.SetParent(parent, false);
+        rt.sizeDelta = new Vector2(w, h);
+        rt.anchoredPosition = anchored;
 
-        var raw = nodeId.Trim();
-        char[] seps = new[] { '_', '-', '.', ':' };
-        var parts = raw.Split(seps, StringSplitOptions.RemoveEmptyEntries);
+        var img = go.GetComponent<Image>();
+        img.color = new Color(0.25f, 0.25f, 0.25f, 1f);
 
-        foreach (var p in parts)
-        {
-            var up = p.ToUpperInvariant();
-            if (up.StartsWith("CH")) chapter = up;
-            else if (up.StartsWith("SC")) scene = up;
-            else if (up.StartsWith("N")) node = up;
-            else if (int.TryParse(up, out _)) node = "N" + up;
-        }
-        if (node == null)
-        {
-            var last = parts[parts.Length - 1].ToUpperInvariant();
-            node = last.StartsWith("N") ? last : "N" + last;
-        }
-        return !string.IsNullOrEmpty(node);
-    }
-
-    private static IEnumerable<string> BuildNodeIdCandidates(string chapter, string scene, string node)
-    {
-        chapter = string.IsNullOrEmpty(chapter) ? null : chapter.ToUpperInvariant();
-        scene = string.IsNullOrEmpty(scene) ? null : scene.ToUpperInvariant();
-        node = string.IsNullOrEmpty(node) ? null : node.ToUpperInvariant();
-
-        if (chapter != null && !chapter.StartsWith("CH")) chapter = "CH" + chapter.TrimStart('C', 'H');
-        if (scene != null && !scene.StartsWith("SC")) scene = "SC" + scene.TrimStart('S', 'C');
-        if (node != null && !node.StartsWith("N")) node = "N" + node.TrimStart('N');
-
-        if (chapter != null && scene != null && node != null)
-        {
-            yield return $"{chapter}_{scene}_{node}";
-            yield return $"{chapter}-{scene}-{node}";
-            yield return $"{chapter}.{scene}.{node}";
-        }
-        if (scene != null && node != null)
-        {
-            yield return $"{scene}_{node}";
-            yield return $"{scene}-{node}";
-            yield return $"{scene}.{node}";
-        }
-        if (node != null)
-        {
-            yield return node;
-        }
+        NewTMP(rt, label, 28, Vector2.zero, new Vector2(w - 20, h - 16));
+        return go.GetComponent<Button>();
     }
 }

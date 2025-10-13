@@ -1,122 +1,79 @@
 using System;
+using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using UnityEngine;
 
 public static class EffectRunner
 {
-    // 수치 변동 발생 시 UI 등에 통지하고 싶을 때 쓰는 이벤트 (옵션)
-    // targetId: 보통 캐릭터ID(예: YUNA), statKey: "affinity:YUNA"/"gold"/"item:Ticket" 등, delta: +/-
+    // (옵션) 외부 UI 갱신용 훅: scope/key/delta 알림
     public static Action<string, string, int> OnStatApplied;
 
     /// <summary>
-    /// 한 줄 효과를 실행한다. jump 대상이 있으면 그 NodeId를 반환.
+    /// 세미콜론(;)으로 구분된 효과 문자열 실행.
+    /// 지원:
+    ///  - cond ? effect      (삼항식 유사)
+    ///  - else: effect       (앞의 어떤 조건도 매치 안되면 실행)
+    ///  - rand(p) / !rand(p) (0~100, 같은 p는 한 번만 추첨해 공유 → 70/30 정확 보장)
+    ///  - jump/goto/next:NodeId  (점프 반환)
+    ///  - flag./var./item[]/affinity[]/relation[a,b] (GameState API 직호출)
+    ///  - gold/stamina는 var 스코프로 처리: var.gold.gold, var.stamina.stamina
+    /// 반환: 점프할 NodeId (없으면 null)
     /// </summary>
-    public static string Apply(string effect, StoryLine line)
+    public static string Apply(string effects, StoryLine line)
     {
-        if (string.IsNullOrWhiteSpace(effect)) return null;
+        if (string.IsNullOrWhiteSpace(effects)) return null;
 
-        string jumpTarget = null;
-        var parts = effect.Split(';');
+        // 1) rand() 전처리: 같은 p는 한 번만 추첨해서 공유
+        var randCache = new Dictionary<int, bool>();
+        string pre = PreprocessRand(effects, randCache);
 
-        System.Random rng = new System.Random(); // rand() 용
+        // 2) ; 단위 처리
+        string jump = null;
+        bool anyMatched = false;
 
-        foreach (var raw in parts)
+        foreach (var raw in pre.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries))
         {
-            var s = raw.Trim();
-            if (string.IsNullOrEmpty(s)) continue;
+            string s = raw.Trim();
+            if (s.Length == 0) continue;
 
-            // 수치 가감: scope:key±N  (affinity:YUNA+5, item:Ticket-1, gold:+50, stamina:-2)
-            var add = Regex.Match(s, @"^(?<scope>\w+):(?<key>[\w-]*)\s*(?<num>[+\-]\d+)$");
-            if (add.Success)
+            // else: effect
+            if (s.StartsWith("else:", StringComparison.OrdinalIgnoreCase))
             {
-                var scope = add.Groups["scope"].Value;
-                var key = add.Groups["key"].Value;
-                int delta = int.Parse(add.Groups["num"].Value);
-                GameState.I.AddVar(scope, key, delta);
-
-                string statKey = scope.ToLower() switch
+                if (!anyMatched)
                 {
-                    "affinity" => $"affinity:{key}",
-                    "item" => $"item:{key}",
-                    "gold" => "gold",
-                    "stamina" => "stamina",
-                    _ => scope
-                };
-                OnStatApplied?.Invoke(string.IsNullOrEmpty(key) ? null : key, statKey, delta);
+                    string eff = s[(s.IndexOf(':') + 1)..].Trim();
+                    jump = ApplyOne(eff, line) ?? jump;
+                    anyMatched = true;
+                }
                 continue;
             }
 
-            // 플래그 세팅
-            if (s.StartsWith("flag:", StringComparison.OrdinalIgnoreCase))
+            // cond ? effect
+            var qm = Regex.Match(s, @"^(.*?)\?(.*)$");
+            if (qm.Success)
             {
-                GameState.I.SetFlag(s.Substring("flag:".Length).Trim());
+                string cond = qm.Groups[1].Value.Trim();
+                string eff = qm.Groups[2].Value.Trim();
+
+                bool pass = EvaluateCondFast(cond, line);
+                if (pass)
+                {
+                    jump = ApplyOne(eff, line) ?? jump;
+                    anyMatched = true;
+                }
                 continue;
             }
 
-            // 관계도 가감: relation:A,B±N  또는 relation:A/B±N
-            var rel = Regex.Match(
-                s,
-                @"^relation:(?<A>[\w-]+)[,\/](?<B>[\w-]+)\s*(?<num>[+\-]\d+)$",
-                RegexOptions.IgnoreCase
-            );
-            if (rel.Success)
-            {
-                string A = rel.Groups["A"].Value.Trim();
-                string B = rel.Groups["B"].Value.Trim();
-                int delta = int.Parse(rel.Groups["num"].Value);
-                GameState.I.AddRelation(A, B, delta);
-                OnStatApplied?.Invoke(A, "relation", delta);
-                continue;
-            }
-
-            // 잠금 → 플래그로 저장
-            if (s.StartsWith("lock:", StringComparison.OrdinalIgnoreCase))
-            {
-                GameState.I.SetFlag($"lock:{s.Substring("lock:".Length).Trim()}");
-                continue;
-            }
-
-            // 즉시 분기
-            if (s.StartsWith("jump:", StringComparison.OrdinalIgnoreCase))
-            {
-                jumpTarget = s.Substring("jump:".Length).Trim();
-                continue;
-            }
-
-            // rand(p)?jump:ID  (p% 확률로 분기)
-            var r = Regex.Match(s, @"^rand\((?<p>\d{1,3})\)\?jump:(?<target>[\w_]+)$", RegexOptions.IgnoreCase);
-            if (r.Success)
-            {
-                int p = Mathf.Clamp(int.Parse(r.Groups["p"].Value), 0, 100);
-                int roll = rng.Next(0, 100);
-                if (roll < p) jumpTarget = r.Groups["target"].Value;
-                continue;
-            }
-
-            // !rand(p)?jump:ID  (p% 실패 시 분기)
-            var rn = Regex.Match(s, @"^!rand\((?<p>\d{1,3})\)\?jump:(?<target>[\w_]+)$", RegexOptions.IgnoreCase);
-            if (rn.Success)
-            {
-                int p = Mathf.Clamp(int.Parse(rn.Groups["p"].Value), 0, 100);
-                int roll = rng.Next(0, 100);
-                if (roll >= p) jumpTarget = rn.Groups["target"].Value;
-                continue;
-            }
-
-            // 메시지 트리거(툴팁/경고 UI와 연동용) — 여기서는 실제 표시 X
-            if (s.StartsWith("show_message:", StringComparison.OrdinalIgnoreCase) ||
-                s.StartsWith("message:", StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
-
-            Debug.LogWarning($"[EffectRunner] 알 수 없는 이펙트: {s}");
+            // 단순 effect
+            jump = ApplyOne(s, line) ?? jump;
         }
 
-        return jumpTarget;
+        return jump;
     }
 
-    /// <summary> 노드 체인(Conditions→ElseIf→Else)을 실행하고 jump를 반환. </summary>
+    /// <summary>
+    /// DialogueNode의 조건/효과 체인 실행 후 점프 반환
+    /// </summary>
     public static string RunNodeChain(DialogueNode node, StoryLine line)
     {
         if (node == null) return null;
@@ -130,10 +87,183 @@ public static class EffectRunner
         return Apply(node.ElseEffects, line);
     }
 
-    /// <summary> 스킵 페널티 전용 </summary>
-    public static void ApplySkipPenalty(DialogueNode node, StoryLine line)
+    // ─────────────────────────────────────────────
+    // 내부: rand() / 조건 / 단일 효과 적용
+    // ─────────────────────────────────────────────
+
+    static string PreprocessRand(string s, Dictionary<int, bool> cache)
     {
-        if (node == null) return;
-        Apply(node.SkipPenalty, line);
+        // !rand(p) 먼저 치환
+        s = Regex.Replace(s, @"!rand\((\d{1,3})\)", m =>
+        {
+            int p = ClampP(m.Groups[1].Value);
+            bool v = SampleRand(p, cache);
+            return v ? "FALSE" : "TRUE";
+        }, RegexOptions.IgnoreCase);
+
+        // rand(p)
+        s = Regex.Replace(s, @"rand\((\d{1,3})\)", m =>
+        {
+            int p = ClampP(m.Groups[1].Value);
+            bool v = SampleRand(p, cache);
+            return v ? "TRUE" : "FALSE";
+        }, RegexOptions.IgnoreCase);
+
+        return s;
+    }
+
+    static int ClampP(string pText) { int p = 0; int.TryParse(pText, out p); return Mathf.Clamp(p, 0, 100); }
+
+    static bool SampleRand(int p, Dictionary<int, bool> cache)
+    {
+        if (!cache.TryGetValue(p, out var v))
+        {
+            int roll = UnityEngine.Random.Range(1, 101);
+            v = (roll <= p);
+            cache[p] = v;
+            // Debug.Log($"[EffectRunner] rand({p}) -> {v} (roll={roll})");
+        }
+        return v;
+    }
+
+    static bool EvaluateCondFast(string cond, StoryLine line)
+    {
+        string u = cond.Trim().ToUpperInvariant();
+        if (u == "TRUE" || u == "1") return true;
+        if (u == "FALSE" || u == "0") return false;
+        return ConditionEvaluator.Evaluate(cond, line);
+    }
+
+    // ---------------- 단일 효과 실행 (jump 대상 반환) ----------------
+    static string ApplyOne(string s, StoryLine line)
+    {
+        if (string.IsNullOrWhiteSpace(s)) return null;
+
+        // jump/goto/next:ID
+        if (s.StartsWith("jump:", StringComparison.OrdinalIgnoreCase) ||
+            s.StartsWith("goto:", StringComparison.OrdinalIgnoreCase) ||
+            s.StartsWith("next:", StringComparison.OrdinalIgnoreCase))
+        {
+            return s[(s.IndexOf(':') + 1)..].Trim();
+        }
+
+        // ── 1) flag
+        //  - flag.key=1 / flag.key (true)
+        //  - flag.key=0 / !flag.key  → 현재 GameState에 해제 API가 없어서 경고만.
+        var mFlagSet = Regex.Match(s, @"^flag\.(\w+)\s*=\s*(\d+)$", RegexOptions.IgnoreCase);
+        if (mFlagSet.Success)
+        {
+            string key = mFlagSet.Groups[1].Value;
+            bool on = mFlagSet.Groups[2].Value != "0";
+            if (on) GameState.I.SetFlag(key);
+            else Debug.LogWarning($"[EffectRunner] flag.{key}=0 요청됐지만 GameState에 해제 API가 없어 무시됨.");
+            return null;
+        }
+        var mFlagTrue = Regex.Match(s, @"^flag\.(\w+)$", RegexOptions.IgnoreCase);
+        if (mFlagTrue.Success) { GameState.I.SetFlag(mFlagTrue.Groups[1].Value); return null; }
+        var mFlagFalse = Regex.Match(s, @"^!flag\.(\w+)$", RegexOptions.IgnoreCase);
+        if (mFlagFalse.Success) { Debug.LogWarning($"[EffectRunner] !flag.{mFlagFalse.Groups[1].Value} 요청됐지만 해제 API가 없어 무시됨."); return null; }
+
+        // ── 2) var.scope.key = / += / -=  (AddVar/GetVar 사용)
+        // 예) var.affinity.SORA+=1, var.item.Key+=2, var.gold.gold+=100, var.stamina.stamina-=1
+        var mVar = Regex.Match(s, @"^var\.(\w+)\.(\w+)\s*(\+?=|\-?=|=)\s*(\-?\d+)$", RegexOptions.IgnoreCase);
+        if (mVar.Success)
+        {
+            string scope = mVar.Groups[1].Value; // affinity/item/gold/stamina/...
+            string key = mVar.Groups[2].Value;
+            string op = mVar.Groups[3].Value;
+            int v = int.Parse(mVar.Groups[4].Value);
+
+            int cur = GameState.I.GetVar(scope, key);
+            int delta = 0;
+            if (op == "=") delta = v - cur;
+            if (op == "+=") delta = v;
+            if (op == "-=") delta = -v;
+
+            if (delta != 0)
+            {
+                GameState.I.AddVar(scope, key, delta);
+                OnStatApplied?.Invoke(scope, key, delta);
+            }
+            return null;
+        }
+
+        // ── 3) item[Key] = / += / -=  (직접 API)
+        var mItem = Regex.Match(s, @"^item\[(.+?)\]\s*(\+?=|\-?=|=)\s*(\-?\d+)$", RegexOptions.IgnoreCase);
+        if (mItem.Success)
+        {
+            string key = mItem.Groups[1].Value;
+            string op = mItem.Groups[2].Value;
+            int v = int.Parse(mItem.Groups[3].Value);
+
+            int cur = GameState.I.GetItem(key);
+            int delta = (op == "=") ? (v - cur) : (op == "+=" ? v : -v);
+            if (delta != 0)
+            {
+                GameState.I.AddItem(key, delta);
+                OnStatApplied?.Invoke("item", key, delta);
+            }
+            return null;
+        }
+
+        // ── 4) affinity[Name] += / -= / =
+        var mAff = Regex.Match(s, @"^affinity\[(.+?)\]\s*(\+?=|\-?=|=)\s*(\-?\d+)$", RegexOptions.IgnoreCase);
+        if (mAff.Success)
+        {
+            string who = mAff.Groups[1].Value;
+            string op = mAff.Groups[2].Value;
+            int v = int.Parse(mAff.Groups[3].Value);
+
+            int cur = GameState.I.GetAffinity(who);
+            int delta = (op == "=") ? (v - cur) : (op == "+=" ? v : -v);
+            if (delta != 0)
+            {
+                GameState.I.AddAffinity(who, delta);
+                OnStatApplied?.Invoke("affinity", who, delta);
+            }
+            return null;
+        }
+
+        // ── 5) relation[a,b] += / -= / =
+        var mRel = Regex.Match(s, @"^relation\[(.+?)\s*,\s*(.+?)\]\s*(\+?=|\-?=|=)\s*(\-?\d+)$", RegexOptions.IgnoreCase);
+        if (mRel.Success)
+        {
+            string a = mRel.Groups[1].Value;
+            string b = mRel.Groups[2].Value;
+            string op = mRel.Groups[3].Value;
+            int v = int.Parse(mRel.Groups[4].Value);
+
+            int cur = GameState.I.GetRelation(a, b);
+            int delta = (op == "=") ? (v - cur) : (op == "+=" ? v : -v);
+            if (delta != 0)
+            {
+                GameState.I.AddRelation(a, b, delta);
+                OnStatApplied?.Invoke("relation", $"{a}|{b}", delta);
+            }
+            return null;
+        }
+
+        // gold/stamina는 var 스코프로 쓰길 권장하지만, 구문 단축도 허용
+        var mGold = Regex.Match(s, @"^gold\s*(\+?=|\-?=|=)\s*(\-?\d+)$", RegexOptions.IgnoreCase);
+        if (mGold.Success)
+        {
+            int v = int.Parse(mGold.Groups[2].Value);
+            int cur = GameState.I.GetVar("gold", "gold");
+            int delta = (mGold.Groups[1].Value == "=") ? (v - cur) : (mGold.Groups[1].Value == "+=" ? v : -v);
+            if (delta != 0) { GameState.I.AddVar("gold", "gold", delta); OnStatApplied?.Invoke("gold", "gold", delta); }
+            return null;
+        }
+        var mSta = Regex.Match(s, @"^stamina\s*(\+?=|\-?=|=)\s*(\-?\d+)$", RegexOptions.IgnoreCase);
+        if (mSta.Success)
+        {
+            int v = int.Parse(mSta.Groups[2].Value);
+            int cur = GameState.I.GetVar("stamina", "stamina");
+            int delta = (mSta.Groups[1].Value == "=") ? (v - cur) : (mSta.Groups[1].Value == "+=" ? v : -v);
+            if (delta != 0) { GameState.I.AddVar("stamina", "stamina", delta); OnStatApplied?.Invoke("stamina", "stamina", delta); }
+            return null;
+        }
+
+        // 그 외는 무시(필요 시 확장)
+        return null;
     }
 }

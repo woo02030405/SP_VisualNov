@@ -44,6 +44,18 @@ namespace VN.SaveSystem
         public string weather = "CLEAR";
     }
 
+    // ─────────────────────────────────────────────────────────────
+    // 백로그 항목 (읽은 대사 기록)
+    // ─────────────────────────────────────────────────────────────
+    [Serializable]
+    public class BacklogEntry
+    {
+        public string nodeId;
+        public string speaker;
+        public string text;
+        public string time;   // "HH:mm:ss"
+    }
+
     [Serializable]
     public class StoryData
     {
@@ -52,6 +64,15 @@ namespace VN.SaveSystem
         public string nodeId = "N001";
         public List<string> finishedEvents = new();
         public Dictionary<string, int> cooldowns = new();
+
+        // (CSV 전체 기억)
+        public string csvPath = "";          // 예: "CSV/Ch1_MainStory_kr" (Resources 키)
+        public List<string> csvRows = new(); // CSV 원문 라인 전체 (경로가 없을 때 사용)
+
+        // ── 읽음/스킵/백로그 상태 (하위호환 안전 추가)
+        public List<string> readNodes = new();       // 읽은 NodeId 목록(HashSet 대체 직렬화)
+        public List<BacklogEntry> backlog = new();   // 백로그(최근 대사 기록)
+        public int backlogLimit = 200;               // 저장/로드 시 유지할 최대 개수
     }
 
     [Serializable]
