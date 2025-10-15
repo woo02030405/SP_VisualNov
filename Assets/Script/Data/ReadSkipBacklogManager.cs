@@ -128,8 +128,21 @@ public class ReadSkipBacklogManager : MonoBehaviour
             _backlog.RemoveRange(0, _backlog.Count - maxBacklog);
     }
 
+    // 초기화 (읽음 + 백로그 완전 리셋)
+    public void ResetAll()
+    {
+        _read.Clear();
+        _backlog.Clear();
+        Debug.Log("[RSBM] Cleared all read nodes and backlog data.");
+    }
+
+
     // 조회 헬퍼
     public IReadOnlyList<BacklogLine> GetBacklog() => _backlog;
     public int GetBacklogCount() => _backlog.Count;
-    public void ClearBacklog() => _backlog.Clear();
+    public void ClearBacklog()
+    {
+        _backlog.Clear();
+        Debug.Log("[RSBM] Backlog cleared (read nodes preserved)");
+    }
 }

@@ -93,7 +93,6 @@ public class DialogueUI : MonoBehaviour
         }
     }
 
-
     // ===== 표시 =====
     public void ShowDialogue(string speakerName, string text)
     {
@@ -168,4 +167,8 @@ public class DialogueUI : MonoBehaviour
         string msg = $"{emoji}{(delta >= 0 ? "+" : "")}{delta}";
         ShowFloatingHintAtSpeaker(targetSpeakerId, msg);
     }
+
+    // ===== 스킵 컨트롤러용 간단 프로퍼티 =====
+    // 선택지 패널 오브젝트 없이, 현재 스폰된 선택지 유무로 판단
+    public bool IsChoiceActive => HasChoices();
 }

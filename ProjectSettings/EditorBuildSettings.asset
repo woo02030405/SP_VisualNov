@@ -24,6 +24,9 @@ EditorBuildSettings:
     path: Assets/Scenes/Gallery/FlowchartScene.unity
     guid: 1de870f8d8e83764899cdf9298ad7b0a
   - enabled: 1
+    path: Assets/Scenes/SaveLoadScene.unity
+    guid: 201fa15ca0a53704092982b37e2cbc14
+  - enabled: 1
     path: Assets/Scenes/Gallery/GalleryHubScene.unity
     guid: cab8aaf54ff09764a8b2bf97ab4285bc
   m_configObjects: {}

@@ -52,13 +52,7 @@ public class DialogueManager : MonoBehaviour
 
         if (dialogueNodes == null || storyLines == null) { Debug.LogError("[DialogueManager] CSV 로드 실패"); enabled = false; return; }
 
-        // CSV Skipping == "1" → 초기 읽음 처리 (ReadSkipBacklogManager가 있을 때만)
-        foreach (var kv in dialogueNodes)
-        {
-            var node = kv.Value;
-            if (!string.IsNullOrEmpty(node.Skipping) && node.Skipping.Trim() == "1")
-                RSBM_SetInitialRead(node.NodeId, "1"); // Reflection 호출(없으면 조용히 무시)
-        }
+        
 
         // UI 콜백
         dialogueUI.onClickNext = Next;
@@ -141,8 +135,7 @@ public class DialogueManager : MonoBehaviour
         // 화면 표시
         dialogueUI.ShowDialogue(speakerName, shownText);
 
-        // 읽음/백로그 확정(있으면)
-        RSBM_MarkRead(currentNodeId);
+        // 초기 읽음 설정(세이브 로드용)
         RSBM_AddBacklog(currentNodeId, speakerName, shownText);
 
         // END 처리
@@ -227,6 +220,10 @@ public class DialogueManager : MonoBehaviour
 
     private void OnChoiceSelected(GameObject btn, string choiceNodeId, string label)
     {
+        // 현재 노드를 떠날 때 읽음 처리
+        if (!string.IsNullOrEmpty(currentNodeId))
+            RSBM_MarkRead(currentNodeId);
+
         if (!dialogueNodes.TryGetValue(choiceNodeId, out var n)) { Debug.LogWarning($"선택 노드 없음: {choiceNodeId}"); return; }
         storyLines.TryGetValue(choiceNodeId, out var line);
 
@@ -268,6 +265,10 @@ public class DialogueManager : MonoBehaviour
     {
         if (dialogueUI && dialogueUI.HasChoices()) return;
         if (dialogueUI && dialogueUI.IsTyping()) { dialogueUI.CompleteTyping(); return; }
+
+        // 현재 노드를 떠나기 직전에 읽음 처리
+        if (!string.IsNullOrEmpty(currentNodeId))
+            RSBM_MarkRead(currentNodeId);
 
         // 선택 에코 이후 대기 중이면 우선 처리
         if (_awaitingAdvance && !string.IsNullOrEmpty(_queuedNextNode))

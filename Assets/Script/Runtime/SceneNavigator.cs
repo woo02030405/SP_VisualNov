@@ -6,7 +6,7 @@ public class SceneNavigator : MonoBehaviour
     public static string LastSceneName { get; private set; }
 
     /// <summary>
-    /// ÀÏ¹İÀûÀÎ ¾À ·Îµå (ÀÚµ¿À¸·Î ÇöÀç ¾ÀÀ» LastSceneName¿¡ ±â·Ï)
+    /// ì¼ë°˜ì ì¸ ì”¬ ë¡œë“œ (ìë™ìœ¼ë¡œ í˜„ì¬ ì”¬ì„ LastSceneNameì— ê¸°ë¡)
     /// </summary>
     public void Load(string sceneName)
     {
@@ -15,7 +15,7 @@ public class SceneNavigator : MonoBehaviour
     }
 
     /// <summary>
-    /// Æ¯Á¤ ¾ÀÀ¸·Î µ¹¾Æ°¡µµ·Ï °­Á¦ ÁöÁ¤
+    /// íŠ¹ì • ì”¬ìœ¼ë¡œ ëŒì•„ê°€ë„ë¡ ê°•ì œ ì§€ì •
     /// </summary>
     public void Load(string sceneName, string returnSceneName)
     {
@@ -24,7 +24,7 @@ public class SceneNavigator : MonoBehaviour
     }
 
     /// <summary>
-    /// ÀÌÀü ¾À(¶Ç´Â ÁöÁ¤µÈ ¾À)À¸·Î º¹±Í
+    /// ì´ì „ ì”¬(ë˜ëŠ” ì§€ì •ëœ ì”¬)ìœ¼ë¡œ ë³µê·€
     /// </summary>
     public void Back()
     {
@@ -34,7 +34,7 @@ public class SceneNavigator : MonoBehaviour
         }
         else
         {
-            // ±âº»°ª: ¸ŞÀÎ ¸Ş´º
+            // ê¸°ë³¸ê°’: ë©”ì¸ ë©”ë‰´
             SceneManager.LoadScene("MainMenuScene", LoadSceneMode.Single);
         }
     }
