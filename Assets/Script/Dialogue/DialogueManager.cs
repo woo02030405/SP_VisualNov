@@ -1,9 +1,11 @@
+using Game.Dialogue;
 using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Reflection;
-using UnityEngine;
 using TMPro;
+using UnityEngine;
+
 
 public class DialogueManager : MonoBehaviour
 {
@@ -138,6 +140,9 @@ public class DialogueManager : MonoBehaviour
         // 초기 읽음 설정(세이브 로드용)
         RSBM_AddBacklog(currentNodeId, speakerName, shownText);
 
+        // 백로그에도 기록 (보이스 클립 있으면 3번째 인자로)
+        BacklogManager.Instance?.AddLog(speakerName, shownText, null);
+
         // END 처리
         if (nodeType == "END")
         {
@@ -255,6 +260,10 @@ public class DialogueManager : MonoBehaviour
         dialogueUI.ShowDialogue(string.IsNullOrEmpty(hero) ? "주인공" : hero, label);
         RSBM_MarkRead(choiceNodeId);
         RSBM_AddBacklog(choiceNodeId, string.IsNullOrEmpty(hero) ? "주인공" : hero, label);
+
+        // 백로그에도 기록
+        BacklogManager.Instance?.AddLog(string.IsNullOrEmpty(hero) ? "주인공" : hero, label, null);
+
 
         // 3) NextNodeId로 즉시 이동
         if (!string.IsNullOrEmpty(n.NextNodeId)) { DirectAdvance(n.NextNodeId); return; }

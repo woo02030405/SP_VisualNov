@@ -1,41 +1,53 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-public class BacklogManager : MonoBehaviour
+namespace Game.Dialogue
 {
-    public static BacklogManager Instance;
-    private List<BacklogEntry> backlogList = new List<BacklogEntry>();
-    private const int MaxLogCount = 30; // 최근 30줄까지만 저장
-
-    private void Awake()
+    public class BacklogManager : MonoBehaviour
     {
-        Instance = this;
+        public static BacklogManager Instance { get; private set; }
+
+        private readonly List<BacklogEntry> logs = new List<BacklogEntry>();
+        private const int MaxCount = 30;
+
+        private void Awake()
+        {
+            if (Instance != null && Instance != this)
+            {
+                Destroy(gameObject);
+                return;
+            }
+            Instance = this;
+            DontDestroyOnLoad(gameObject);
+        }
+
+        public void AddLog(string speaker, string text, AudioClip voice = null)
+        {
+            Debug.Log($"[Backlog/Add] '{speaker}' : '{text}' (voice={(voice ? "Y" : "N")})");
+
+            if (string.IsNullOrWhiteSpace(text)) return;
+
+            logs.Add(new BacklogEntry(speaker, text, voice));
+
+            if (logs.Count > MaxCount)
+                logs.RemoveAt(0);
+        }
+
+        public IReadOnlyList<BacklogEntry> GetLogs() => logs;
     }
 
-    public void AddLog(string speaker, string content, AudioClip voice)
+    [System.Serializable]
+    public class BacklogEntry
     {
-        backlogList.Add(new BacklogEntry(speaker, content, voice));
-        if (backlogList.Count > MaxLogCount)
-            backlogList.RemoveAt(0);
-    }
+        public string Speaker;
+        public string Text;
+        public AudioClip VoiceClip;
 
-    public List<BacklogEntry> GetLogs()
-    {
-        return backlogList;
-    }
-}
-
-[System.Serializable]
-public class BacklogEntry
-{
-    public string Speaker;
-    public string Content;
-    public AudioClip VoiceClip;
-
-    public BacklogEntry(string speaker, string content, AudioClip voice)
-    {
-        Speaker = speaker;
-        Content = content;
-        VoiceClip = voice;
+        public BacklogEntry(string speaker, string text, AudioClip voice)
+        {
+            Speaker = speaker;
+            Text = text;
+            VoiceClip = voice;
+        }
     }
 }
